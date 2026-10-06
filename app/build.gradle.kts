@@ -49,4 +49,7 @@ dependencies {
     
     // Coil Image Loader
     implementation("io.coil-kt:coil-compose:2.5.0")
+    
+    // Firebase Realtime Database
+    implementation("com.google.firebase:firebase-database-ktx:20.3.1")
 }
