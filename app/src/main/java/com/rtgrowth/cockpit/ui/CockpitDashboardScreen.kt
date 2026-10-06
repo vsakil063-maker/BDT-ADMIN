@@ -9,8 +9,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -100,7 +98,7 @@ fun TopCockpitHeader() {
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(12.dp))
+                    Icon(Icons.Filled.Star, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(12.dp))
                     Text("RT", color = GoldPrimary, fontWeight = FontWeight.Black, fontSize = 14.sp)
                 }
             }
@@ -167,7 +165,7 @@ fun WelcomeDatabaseCard() {
                         .border(1.dp, GoldPrimary, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.WorkspacePremium, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(26.dp))
+                    Icon(Icons.Filled.Verified, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(26.dp))
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
@@ -264,7 +262,7 @@ fun OverviewStatisticsSection() {
                 change = "+15%",
                 subtitle = "Total profits",
                 accentColor = NeonPurple,
-                icon = Icons.AutoMirrored.Filled.TrendingUp
+                icon = Icons.Rounded.TrendingUp
             )
             StatCard(
                 modifier = Modifier.weight(1f),
@@ -348,7 +346,7 @@ fun CommandWorkspaceDeckSection() {
         WorkspaceData("Deposits", "Review and manage deposit requests.", Icons.Rounded.AccountBalanceWallet, NeonYellow, null),
         WorkspaceData("Withdrawals", "Pending withdrawal requests.", Icons.Rounded.Payments, NeonGreen, 2),
         WorkspaceData("Send Money Req", "Handle transfer requests.", Icons.Rounded.Send, NeonBlue, 0),
-        WorkspaceData("Recharges", "Mobile & wallet recharge requests.", Icons.Rounded.ElectricBolt, NeonYellow, 0),
+        WorkspaceData("Recharges", "Mobile & wallet recharge requests.", Icons.Rounded.Bolt, NeonYellow, 0),
         WorkspaceData("Gift Vouchers", "Create and manage voucher codes.", Icons.Rounded.CardGiftcard, NeonRose, 31),
         WorkspaceData("Typing Tasks", "Create tasks and review submissions.", Icons.Rounded.Keyboard, NeonPurple, 0),
         WorkspaceData("Support Chat", "View conversations and reply to users.", Icons.Rounded.Headphones, NeonCyan, 3),
@@ -365,7 +363,6 @@ fun CommandWorkspaceDeckSection() {
                 }
             }
         }
-        // Together We Grow Banner
         Row(modifier = Modifier.fillMaxWidth()) {
             Spacer(modifier = Modifier.weight(1f))
             TogetherWeGrowCard(modifier = Modifier.weight(1f))
@@ -434,7 +431,7 @@ fun WorkspaceActionCard(modifier: Modifier = Modifier, data: WorkspaceData) {
                         .border(1.dp, GoldPrimary.copy(alpha = 0.4f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(10.dp))
+                    Icon(Icons.Filled.ArrowForwardIos, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(10.dp))
                 }
             }
         }
@@ -464,7 +461,7 @@ fun TogetherWeGrowCard(modifier: Modifier = Modifier) {
                 fontStyle = FontStyle.Italic
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(32.dp))
+            Icon(Icons.Rounded.TrendingUp, contentDescription = null, tint = GoldPrimary, modifier = Modifier.size(32.dp))
         }
     }
 }
