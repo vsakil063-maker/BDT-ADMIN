@@ -1,7 +1,6 @@
 package com.rtgrowth.cockpit.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,22 +25,20 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rtgrowth.cockpit.R
+import coil.compose.AsyncImage
 
 // ==========================================
-// 🎨 Luxury 3D Dark & Neon Color Palette
+// 🎨 Luxury Gold & Deep Dark Palette
 // ==========================================
-val BgCanvasDark = Color(0xFF07080B)
+val DarkCanvasBg = Color(0xFF07080B)
 val CardSurfaceTop = Color(0xFF131520)
 val CardSurfaceBottom = Color(0xFF090A0E)
 
@@ -49,7 +46,7 @@ val GoldMetallicLight = Color(0xFFFFE57F)
 val GoldMetallicMain = Color(0xFFF5BA42)
 val GoldMetallicDark = Color(0xFF8D6210)
 
-// 3D Neon Outlines
+// 3D Neon Card Outlines
 val NeonBlue = Color(0xFF2979FF)
 val NeonGreen = Color(0xFF00E676)
 val NeonRose = Color(0xFFFF1744)
@@ -64,7 +61,7 @@ val TextPureWhite = Color(0xFFFFFFFF)
 fun CockpitDashboardScreen() {
     Scaffold(
         bottomBar = { CockpitLuxuryBottomNav() },
-        containerColor = BgCanvasDark
+        containerColor = DarkCanvasBg
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -72,7 +69,7 @@ fun CockpitDashboardScreen() {
                 .padding(innerPadding)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color(0xFF131522), BgCanvasDark, Color(0xFF030406))
+                        colors = listOf(Color(0xFF131522), DarkCanvasBg, Color(0xFF030406))
                     )
                 )
                 .verticalScroll(rememberScrollState())
@@ -82,9 +79,9 @@ fun CockpitDashboardScreen() {
             Spacer(modifier = Modifier.height(10.dp))
             WelcomeCardCompact()
             Spacer(modifier = Modifier.height(14.dp))
-            OverviewStatsSectionCompact()
+            OverviewStatsSection()
             Spacer(modifier = Modifier.height(16.dp))
-            WorkspaceDeckSectionCompact()
+            WorkspaceDeckSection()
             Spacer(modifier = Modifier.height(14.dp))
         }
     }
@@ -122,7 +119,17 @@ fun HeaderBarCompact() {
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Canvas(modifier = Modifier.size(15.dp, 9.dp)) {
-                        drawCrown3D()
+                        val path = Path().apply {
+                            moveTo(0f, size.height)
+                            lineTo(0f, size.height * 0.2f)
+                            lineTo(size.width * 0.25f, size.height * 0.55f)
+                            lineTo(size.width * 0.5f, 0f)
+                            lineTo(size.width * 0.75f, size.height * 0.55f)
+                            lineTo(size.width, size.height * 0.2f)
+                            lineTo(size.width, size.height)
+                            close()
+                        }
+                        drawPath(path, color = GoldMetallicLight)
                     }
                     Text("RT", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 15.sp, letterSpacing = 1.sp)
                 }
@@ -203,9 +210,7 @@ fun WelcomeCardCompact() {
                     Canvas(modifier = Modifier.size(34.dp)) {
                         drawCircle(Brush.verticalGradient(listOf(GoldMetallicLight, GoldMetallicDark)))
                     }
-                    Canvas(modifier = Modifier.size(20.dp, 13.dp)) {
-                        drawCrown3D(Color(0xFF332000))
-                    }
+                    Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
@@ -225,7 +230,11 @@ fun WelcomeCardCompact() {
             Column(horizontalAlignment = Alignment.End) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Canvas(modifier = Modifier.size(24.dp, 24.dp)) {
-                        drawDatabaseDrums3D()
+                        val cyanGrad = Brush.verticalGradient(listOf(Color(0xFF00E5FF), Color(0xFF004D73)))
+                        drawOval(cyanGrad, topLeft = Offset(0f, 0f), size = Size(size.width * 0.85f, size.height * 0.4f))
+                        drawRect(cyanGrad, topLeft = Offset(0f, size.height * 0.2f), size = Size(size.width * 0.85f, size.height * 0.5f))
+                        drawOval(cyanGrad, topLeft = Offset(0f, size.height * 0.5f), size = Size(size.width * 0.85f, size.height * 0.4f))
+                        drawCircle(Color(0xFF00E676), radius = size.width * 0.22f, center = Offset(size.width * 0.8f, size.height * 0.7f))
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                     Column(horizontalAlignment = Alignment.End) {
@@ -250,10 +259,10 @@ fun WelcomeCardCompact() {
 }
 
 // -------------------------------------------------------------
-// ৩. ওভারভিউ স্ট্যাটিস্টিক্স গ্রিড (ডিপোজিটে আপনার PNG আইকন যুক্ত)
+// ৩. ওভারভিউ স্ট্যাটিস্টিক্স গ্রিড (৬টি আইকন লিংক সহ)
 // -------------------------------------------------------------
 @Composable
-fun OverviewStatsSectionCompact() {
+fun OverviewStatsSection() {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -270,82 +279,81 @@ fun OverviewStatsSectionCompact() {
     Spacer(modifier = Modifier.height(8.dp))
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Row 1: Users & Deposit
+        // Row 1: Total Users & Total Deposit
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCardCompact(
+            StatCardItem(
                 modifier = Modifier.weight(1f),
                 title = "Total Users",
                 value = "919",
                 change = "+12%",
                 subtitle = "Active accounts",
                 glowColor = NeonBlue,
-                iconType = "users"
+                iconUrl = "https://img.icons8.com/?size=100&id=3Z9nycT6VFaI&format=png&color=000000"
             )
-            // 🎯 এখানে আসল PNG আইকন সেট করা হয়েছে
-            StatCardCompact(
+            StatCardItem(
                 modifier = Modifier.weight(1f),
                 title = "Total Deposit",
                 value = "৳64,597.00",
                 change = "+8%",
                 subtitle = "Today: ৳0.00",
                 glowColor = NeonGreen,
-                iconType = "png_deposit"
+                iconUrl = "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000"
             )
         }
-        // Row 2: Withdraw & Work Done
+        // Row 2: Total Withdraw & Work Value Done
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCardCompact(
+            StatCardItem(
                 modifier = Modifier.weight(1f),
                 title = "Total Withdraw",
                 value = "৳57,414.00",
                 change = "+6%",
                 subtitle = "Today: ৳0.00",
                 glowColor = NeonRose,
-                iconType = "withdraw"
+                iconUrl = "https://img.icons8.com/?size=100&id=nBI1rs9Fp9Lm&format=png&color=000000"
             )
-            StatCardCompact(
+            StatCardItem(
                 modifier = Modifier.weight(1f),
                 title = "Work Value Done",
                 value = "৳0.00",
                 change = "+0%",
                 subtitle = "Completed tasks",
                 glowColor = NeonYellow,
-                iconType = "work"
+                iconUrl = "https://img.icons8.com/?size=100&id=5rjf4RBWzzU4&format=png&color=000000"
             )
         }
-        // Row 3: Profits & Assets
+        // Row 3: User Profits & Asset Volume (Accept Value)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCardCompact(
+            StatCardItem(
                 modifier = Modifier.weight(1f),
                 title = "User Profits",
                 value = "৳310,073.00",
                 change = "+15%",
                 subtitle = "Total profits",
                 glowColor = NeonPurple,
-                iconType = "profits"
+                iconUrl = "https://img.icons8.com/?size=100&id=9DRY12f4liKv&format=png&color=000000"
             )
-            StatCardCompact(
+            StatCardItem(
                 modifier = Modifier.weight(1f),
                 title = "Asset Volume",
                 value = "৳53,496.90",
                 change = "+9%",
                 subtitle = "Total assets",
                 glowColor = NeonCyan,
-                iconType = "assets"
+                iconUrl = "https://img.icons8.com/?size=100&id=pemtUT1YiPwP&format=png&color=000000"
             )
         }
     }
 }
 
 @Composable
-fun StatCardCompact(
+fun StatCardItem(
     modifier: Modifier = Modifier,
     title: String,
     value: String,
     change: String,
     subtitle: String,
     glowColor: Color,
-    iconType: String
+    iconUrl: String
 ) {
     Box(
         modifier = modifier
@@ -367,25 +375,12 @@ fun StatCardCompact(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (iconType == "png_deposit") {
-                    // আসল PNG আইকন লোড
-                    Image(
-                        painter = painterResource(id = R.drawable.ic_deposit),
-                        contentDescription = "Deposit",
-                        modifier = Modifier.size(42.dp),
-                        contentScale = ContentScale.Fit
-                    )
-                } else {
-                    Canvas(modifier = Modifier.size(40.dp)) {
-                        when (iconType) {
-                            "users" -> draw3DClayAvatarsGroup()
-                            "withdraw" -> draw3DStackOfCashWithRibbon()
-                            "work" -> draw3DGoldenLightningOrb()
-                            "profits" -> draw3DPurpleCylinderChart()
-                            "assets" -> draw3DCyanSafeVaultBox()
-                        }
-                    }
-                }
+                AsyncImage(
+                    model = iconUrl,
+                    contentDescription = title,
+                    modifier = Modifier.size(38.dp),
+                    contentScale = ContentScale.Fit
+                )
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(title, color = TextDimGray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
@@ -425,10 +420,10 @@ fun StatCardCompact(
 }
 
 // -------------------------------------------------------------
-// ৪. কমান্ড ডেক
+// ৪. কমান্ড ডেক (আপনার দেওয়া সবকটি আইকন লিংক সহ)
 // -------------------------------------------------------------
 @Composable
-fun WorkspaceDeckSectionCompact() {
+fun WorkspaceDeckSection() {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -445,27 +440,88 @@ fun WorkspaceDeckSectionCompact() {
     Spacer(modifier = Modifier.height(8.dp))
 
     val workspaceList = listOf(
-        WorkspaceActionData("User Directory", "Manage users, profiles and account activity.", "deck_users", NeonBlue, null),
-        WorkspaceActionData("Deposits", "Review and manage deposit requests.", "png_deposit", NeonYellow, null),
-        WorkspaceActionData("Withdrawals", "Pending withdrawal requests.", "deck_cash", NeonGreen, 2),
-        WorkspaceActionData("Send Money Req", "Handle transfer requests.", "deck_plane", NeonBlue, 0),
-        WorkspaceActionData("Recharges", "Mobile & wallet recharge requests.", "deck_phone", NeonYellow, 0),
-        WorkspaceActionData("Gift Vouchers", "Create and manage voucher codes.", "deck_gift", NeonRose, 31),
-        WorkspaceActionData("Typing Tasks", "Create tasks and review submissions.", "deck_keyboard", NeonPurple, 0),
-        WorkspaceActionData("Support Chat", "View conversations and reply to users.", "deck_headset", NeonCyan, 3),
-        WorkspaceActionData("Balance Reset", "Authorized balance correction tools.", "deck_reset", NeonRose, null),
-        WorkspaceActionData("System Settings", "Configure security, notifications and database.", "deck_gear", NeonCyan, null)
+        WorkspaceActionData(
+            "User Directory",
+            "Manage users, profiles and account activity.",
+            "https://img.icons8.com/?size=100&id=3Z9nycT6VFaI&format=png&color=000000",
+            NeonBlue,
+            null
+        ),
+        WorkspaceActionData(
+            "Deposits",
+            "Review and manage deposit requests.",
+            "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000",
+            NeonYellow,
+            null
+        ),
+        WorkspaceActionData(
+            "Withdrawals",
+            "Pending withdrawal requests.",
+            "https://img.icons8.com/?size=100&id=nBI1rs9Fp9Lm&format=png&color=000000",
+            NeonGreen,
+            2
+        ),
+        WorkspaceActionData(
+            "Send Money Req",
+            "Handle transfer requests.",
+            "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000",
+            NeonBlue,
+            0
+        ),
+        WorkspaceActionData(
+            "Recharges",
+            "Mobile & wallet recharge requests.",
+            "https://img.icons8.com/?size=100&id=5rjf4RBWzzU4&format=png&color=000000",
+            NeonYellow,
+            0
+        ),
+        WorkspaceActionData(
+            "Gift Vouchers",
+            "Create and manage voucher codes.",
+            "https://img.icons8.com/?size=100&id=DA67d1tKQ9Pr&format=png&color=000000",
+            NeonRose,
+            31
+        ),
+        WorkspaceActionData(
+            "Typing Tasks",
+            "Create tasks and review submissions.",
+            "https://img.icons8.com/?size=100&id=oZAinaxvg8AD&format=png&color=000000",
+            NeonPurple,
+            0
+        ),
+        WorkspaceActionData(
+            "Support Chat",
+            "View conversations and reply to users.",
+            "https://img.icons8.com/?size=100&id=RntMFwIniVlj&format=png&color=000000",
+            NeonCyan,
+            3
+        ),
+        WorkspaceActionData(
+            "Balance Reset",
+            "Authorized balance correction tools.",
+            "https://img.icons8.com/?size=100&id=ifMVi1WVk8u2&format=png&color=000000",
+            NeonRose,
+            null
+        ),
+        WorkspaceActionData(
+            "System Settings",
+            "Configure security, notifications and database.",
+            "https://img.icons8.com/?size=100&id=v39wEv8JU1aa&format=png&color=000000",
+            NeonCyan,
+            null
+        )
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (i in workspaceList.indices step 2) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                WorkspaceCardCompact(modifier = Modifier.weight(1f), data = workspaceList[i])
+                WorkspaceCardItem(modifier = Modifier.weight(1f), data = workspaceList[i])
                 if (i + 1 < workspaceList.size) {
-                    WorkspaceCardCompact(modifier = Modifier.weight(1f), data = workspaceList[i + 1])
+                    WorkspaceCardItem(modifier = Modifier.weight(1f), data = workspaceList[i + 1])
                 }
             }
         }
+        // Together We Grow Golden Chart Card
         Row(modifier = Modifier.fillMaxWidth()) {
             Spacer(modifier = Modifier.weight(1f))
             TogetherWeGrowCompactCard(modifier = Modifier.weight(1f))
@@ -476,13 +532,13 @@ fun WorkspaceDeckSectionCompact() {
 data class WorkspaceActionData(
     val title: String,
     val desc: String,
-    val iconType: String,
+    val iconUrl: String,
     val glowColor: Color,
     val badge: Int?
 )
 
 @Composable
-fun WorkspaceCardCompact(modifier: Modifier = Modifier, data: WorkspaceActionData) {
+fun WorkspaceCardItem(modifier: Modifier = Modifier, data: WorkspaceActionData) {
     Box(
         modifier = modifier
             .shadow(5.dp, RoundedCornerShape(16.dp))
@@ -513,28 +569,12 @@ fun WorkspaceCardCompact(modifier: Modifier = Modifier, data: WorkspaceActionDat
         }
 
         Column {
-            if (data.iconType == "png_deposit") {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_deposit),
-                    contentDescription = data.title,
-                    modifier = Modifier.size(38.dp),
-                    contentScale = ContentScale.Fit
-                )
-            } else {
-                Canvas(modifier = Modifier.size(38.dp)) {
-                    when (data.iconType) {
-                        "deck_users" -> draw3DDeckClayAvatars()
-                        "deck_cash" -> draw3DDeckGreenCash()
-                        "deck_plane" -> draw3DDeckPaperPlane()
-                        "deck_phone" -> draw3DDeckSmartphone()
-                        "deck_gift" -> draw3DDeckGiftBox()
-                        "deck_keyboard" -> draw3DDeckKeyboard()
-                        "deck_headset" -> draw3DDeckHeadphones()
-                        "deck_reset" -> draw3DDeckRefreshButton()
-                        "deck_gear" -> draw3DDeckMechanicalGear()
-                    }
-                }
-            }
+            AsyncImage(
+                model = data.iconUrl,
+                contentDescription = data.title,
+                modifier = Modifier.size(36.dp),
+                contentScale = ContentScale.Fit
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(data.title, color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 11.sp)
@@ -554,7 +594,7 @@ fun WorkspaceCardCompact(modifier: Modifier = Modifier, data: WorkspaceActionDat
                     .align(Alignment.End)
                     .size(20.dp)
                     .background(Color(0xFF1B1E2B), CircleShape)
-                    .border(0.8.dp, GoldMetallicMain.copy(0.6f), CircleShape),
+                .border(0.8.dp, GoldMetallicMain.copy(0.6f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = GoldMetallicLight, modifier = Modifier.size(14.dp))
@@ -614,125 +654,7 @@ fun TogetherWeGrowCompactCard(modifier: Modifier = Modifier) {
 }
 
 // -------------------------------------------------------------
-// ড্রয়িং ফাংশনসমূহ
-// -------------------------------------------------------------
-fun DrawScope.drawCrown3D(color: Color = GoldMetallicLight) {
-    val path = Path().apply {
-        moveTo(0f, size.height)
-        lineTo(0f, size.height * 0.2f)
-        lineTo(size.width * 0.25f, size.height * 0.55f)
-        lineTo(size.width * 0.5f, 0f)
-        lineTo(size.width * 0.75f, size.height * 0.55f)
-        lineTo(size.width, size.height * 0.2f)
-        lineTo(size.width, size.height)
-        close()
-    }
-    drawPath(path, color = color)
-}
-
-fun DrawScope.drawDatabaseDrums3D() {
-    val cyanGrad = Brush.verticalGradient(listOf(Color(0xFF00E5FF), Color(0xFF004D73)))
-    drawOval(cyanGrad, topLeft = Offset(0f, 0f), size = Size(size.width * 0.85f, size.height * 0.4f))
-    drawRect(cyanGrad, topLeft = Offset(0f, size.height * 0.2f), size = Size(size.width * 0.85f, size.height * 0.5f))
-    drawOval(cyanGrad, topLeft = Offset(0f, size.height * 0.5f), size = Size(size.width * 0.85f, size.height * 0.4f))
-    drawCircle(Color(0xFF00E676), radius = size.width * 0.22f, center = Offset(size.width * 0.8f, size.height * 0.7f))
-}
-
-fun DrawScope.draw3DClayAvatarsGroup() {
-    val clayBlue = Brush.radialGradient(listOf(Color(0xFF80D8FF), Color(0xFF0066FF), Color(0xFF001E80)))
-    drawCircle(clayBlue, radius = size.width * 0.2f, center = Offset(size.width * 0.28f, size.height * 0.45f))
-    drawCircle(clayBlue, radius = size.width * 0.22f, center = Offset(size.width * 0.72f, size.height * 0.48f))
-    drawCircle(clayBlue, radius = size.width * 0.26f, center = Offset(size.width * 0.5f, size.height * 0.35f))
-}
-
-fun DrawScope.draw3DStackOfCashWithRibbon() {
-    val cashGrad = Brush.verticalGradient(listOf(Color(0xFF81C784), Color(0xFF1B5E20)))
-    drawRoundRect(cashGrad, topLeft = Offset(size.width * 0.12f, size.height * 0.45f), size = Size(size.width * 0.76f, size.height * 0.4f), cornerRadius = CornerRadius(8f))
-    drawRoundRect(cashGrad, topLeft = Offset(size.width * 0.15f, size.height * 0.3f), size = Size(size.width * 0.72f, size.height * 0.4f), cornerRadius = CornerRadius(8f))
-    drawRoundRect(cashGrad, topLeft = Offset(size.width * 0.18f, size.height * 0.18f), size = Size(size.width * 0.68f, size.height * 0.4f), cornerRadius = CornerRadius(8f))
-    val pinkRibbon = Brush.verticalGradient(listOf(Color(0xFFFF4081), Color(0xFFC2185B)))
-    drawRect(pinkRibbon, topLeft = Offset(size.width * 0.44f, size.height * 0.18f), size = Size(size.width * 0.18f, size.height * 0.65f))
-}
-
-fun DrawScope.draw3DGoldenLightningOrb() {
-    val orbGrad = Brush.radialGradient(listOf(Color(0xFFFFD54F), Color(0xFFFF8F00), Color(0xFFE65100)))
-    drawCircle(orbGrad, radius = size.width * 0.44f, center = Offset(size.width * 0.5f, size.height * 0.5f))
-    val boltPath = Path().apply {
-        moveTo(size.width * 0.54f, size.height * 0.18f)
-        lineTo(size.width * 0.34f, size.height * 0.52f)
-        lineTo(size.width * 0.52f, size.height * 0.52f)
-        lineTo(size.width * 0.44f, size.height * 0.82f)
-        lineTo(size.width * 0.68f, size.height * 0.44f)
-        lineTo(size.width * 0.50f, size.height * 0.44f)
-        close()
-    }
-    drawPath(boltPath, color = Color.White)
-}
-
-fun DrawScope.draw3DPurpleCylinderChart() {
-    val purpleGrad = Brush.verticalGradient(listOf(Color(0xFFE040FB), Color(0xFF651FFF)))
-    drawRoundRect(purpleGrad, topLeft = Offset(size.width * 0.15f, size.height * 0.2f), size = Size(size.width * 0.6f, size.height * 0.65f), cornerRadius = CornerRadius(14f))
-    drawCircle(Brush.radialGradient(listOf(GoldMetallicLight, GoldMetallicDark)), radius = size.width * 0.18f, center = Offset(size.width * 0.72f, size.height * 0.65f))
-}
-
-fun DrawScope.draw3DCyanSafeVaultBox() {
-    val cyanBody = Brush.verticalGradient(listOf(Color(0xFF00E5FF), Color(0xFF004D40)))
-    drawRoundRect(cyanBody, topLeft = Offset(size.width * 0.12f, size.height * 0.15f), size = Size(size.width * 0.76f, size.height * 0.7f), cornerRadius = CornerRadius(14f))
-    drawCircle(Color(0xFF80DEEA), radius = size.width * 0.12f, center = Offset(size.width * 0.5f, size.height * 0.5f))
-}
-
-fun DrawScope.draw3DDeckClayAvatars() {
-    val clayBlue = Brush.radialGradient(listOf(Color(0xFF80D8FF), Color(0xFF0066FF)))
-    drawCircle(clayBlue, radius = size.width * 0.24f, center = Offset(size.width * 0.5f, size.height * 0.38f))
-}
-
-fun DrawScope.draw3DDeckGreenCash() {
-    val cashGrad = Brush.verticalGradient(listOf(Color(0xFF81C784), Color(0xFF1B5E20)))
-    drawRoundRect(cashGrad, topLeft = Offset(size.width * 0.12f, size.height * 0.25f), size = Size(size.width * 0.76f, size.height * 0.5f), cornerRadius = CornerRadius(8f))
-}
-
-fun DrawScope.draw3DDeckPaperPlane() {
-    val planePath = Path().apply {
-        moveTo(size.width * 0.15f, size.height * 0.5f)
-        lineTo(size.width * 0.85f, size.height * 0.15f)
-        lineTo(size.width * 0.6f, size.height * 0.85f)
-        close()
-    }
-    drawPath(planePath, brush = Brush.linearGradient(listOf(Color(0xFF40C4FF), Color(0xFF0091EA))))
-}
-
-fun DrawScope.draw3DDeckSmartphone() {
-    val phoneGrad = Brush.verticalGradient(listOf(Color(0xFF7C4DFF), Color(0xFF311B92)))
-    drawRoundRect(phoneGrad, topLeft = Offset(size.width * 0.25f, size.height * 0.1f), size = Size(size.width * 0.5f, size.height * 0.8f), cornerRadius = CornerRadius(10f))
-}
-
-fun DrawScope.draw3DDeckGiftBox() {
-    val boxGrad = Brush.verticalGradient(listOf(Color(0xFFFF5252), Color(0xFFC62828)))
-    drawRoundRect(boxGrad, topLeft = Offset(size.width * 0.15f, size.height * 0.25f), size = Size(size.width * 0.7f, size.height * 0.6f), cornerRadius = CornerRadius(10f))
-}
-
-fun DrawScope.draw3DDeckKeyboard() {
-    val kbGrad = Brush.verticalGradient(listOf(Color(0xFFB388FF), Color(0xFF4A148C)))
-    drawRoundRect(kbGrad, topLeft = Offset(size.width * 0.1f, size.height * 0.3f), size = Size(size.width * 0.8f, size.height * 0.45f), cornerRadius = CornerRadius(8f))
-}
-
-fun DrawScope.draw3DDeckHeadphones() {
-    val cyanGrad = Brush.verticalGradient(listOf(Color(0xFF00E5FF), Color(0xFF0091EA)))
-    drawArc(cyanGrad, startAngle = 180f, sweepAngle = 180f, useCenter = false, topLeft = Offset(size.width * 0.15f, size.height * 0.2f), size = Size(size.width * 0.7f, size.height * 0.6f), style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round))
-}
-
-fun DrawScope.draw3DDeckRefreshButton() {
-    val redGrad = Brush.radialGradient(listOf(Color(0xFFFF5252), Color(0xFFB71C1C)))
-    drawCircle(redGrad, radius = size.width * 0.4f, center = Offset(size.width * 0.5f, size.height * 0.5f))
-}
-
-fun DrawScope.draw3DDeckMechanicalGear() {
-    val cyanGrad = Brush.radialGradient(listOf(Color(0xFF18FFFF), Color(0xFF006064)))
-    drawCircle(cyanGrad, radius = size.width * 0.4f, center = Offset(size.width * 0.5f, size.height * 0.5f))
-}
-
-// -------------------------------------------------------------
-// লাক্সারি বটম নেভিগেশন বার
+// ৫. লাক্সারি বটম নেভিগেশন বার
 // -------------------------------------------------------------
 @Composable
 fun CockpitLuxuryBottomNav() {
