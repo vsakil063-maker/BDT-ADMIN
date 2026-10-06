@@ -1,5 +1,6 @@
 package com.rtgrowth.cockpit.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,14 +19,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +31,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 
 // ==========================================
@@ -57,8 +57,19 @@ val NeonCyan = Color(0xFF00E5FF)
 val TextDimGray = Color(0xFF8A92A6)
 val TextPureWhite = Color(0xFFFFFFFF)
 
+// মডাল ডাটা ক্লাস
+data class CockpitModalData(
+    val title: String,
+    val description: String,
+    val iconUrl: String,
+    val themeColor: Color,
+    val statValue: String? = null
+)
+
 @Composable
 fun CockpitDashboardScreen() {
+    var activeModal by remember { mutableStateOf<CockpitModalData?>(null) }
+
     Scaffold(
         bottomBar = { CockpitLuxuryBottomNav() },
         containerColor = DarkCanvasBg
@@ -79,10 +90,24 @@ fun CockpitDashboardScreen() {
             Spacer(modifier = Modifier.height(10.dp))
             WelcomeCardCompact()
             Spacer(modifier = Modifier.height(14.dp))
-            OverviewStatsSection()
+            
+            // ওভারভিউ স্ট্যাটিস্টিক্স গ্রিড (ক্লিক করলে মডাল ওপেন হবে)
+            OverviewStatsSection(onCardClick = { activeModal = it })
+            
             Spacer(modifier = Modifier.height(16.dp))
-            WorkspaceDeckSection()
-            Spacer(modifier = Modifier.height(14.dp))
+            
+            // কমান্ড ডেক (ক্লিক করলে মডাল ওপেন হবে)
+            WorkspaceDeckSection(onCardClick = { activeModal = it })
+            
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        // পপআপ মডাল ডায়ালগ
+        activeModal?.let { modalData ->
+            CockpitInteractiveModal(
+                data = modalData,
+                onDismiss = { activeModal = null }
+            )
         }
     }
 }
@@ -259,10 +284,10 @@ fun WelcomeCardCompact() {
 }
 
 // -------------------------------------------------------------
-// ৩. ওভারভিউ স্ট্যাটিস্টিক্স গ্রিড (৬টি আইকন লিংক সহ)
+// ৩. ওভারভিউ স্ট্যাটিস্টিক্স গ্রিড (বড় স্পষ্ট আইকন ও ছোট ব্যাকগ্রাউন্ড)
 // -------------------------------------------------------------
 @Composable
-fun OverviewStatsSection() {
+fun OverviewStatsSection(onCardClick: (CockpitModalData) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -279,7 +304,7 @@ fun OverviewStatsSection() {
     Spacer(modifier = Modifier.height(8.dp))
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Row 1: Total Users & Total Deposit
+        // Row 1
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCardItem(
                 modifier = Modifier.weight(1f),
@@ -288,7 +313,18 @@ fun OverviewStatsSection() {
                 change = "+12%",
                 subtitle = "Active accounts",
                 glowColor = NeonBlue,
-                iconUrl = "https://img.icons8.com/?size=100&id=3Z9nycT6VFaI&format=png&color=000000"
+                iconUrl = "https://img.icons8.com/?size=100&id=3Z9nycT6VFaI&format=png&color=000000",
+                onClick = {
+                    onCardClick(
+                        CockpitModalData(
+                            title = "Total Users Overview",
+                            description = "Current active registered users database log and network status.",
+                            iconUrl = "https://img.icons8.com/?size=100&id=3Z9nycT6VFaI&format=png&color=000000",
+                            themeColor = NeonBlue,
+                            statValue = "919 Active Accounts"
+                        )
+                    )
+                }
             )
             StatCardItem(
                 modifier = Modifier.weight(1f),
@@ -297,10 +333,21 @@ fun OverviewStatsSection() {
                 change = "+8%",
                 subtitle = "Today: ৳0.00",
                 glowColor = NeonGreen,
-                iconUrl = "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000"
+                iconUrl = "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000",
+                onClick = {
+                    onCardClick(
+                        CockpitModalData(
+                            title = "Total Deposit Summary",
+                            description = "All incoming gateway transactions, MFS verification and completed deposits.",
+                            iconUrl = "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000",
+                            themeColor = NeonGreen,
+                            statValue = "৳64,597.00 (Today: ৳0.00)"
+                        )
+                    )
+                }
             )
         }
-        // Row 2: Total Withdraw & Work Value Done
+        // Row 2
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCardItem(
                 modifier = Modifier.weight(1f),
@@ -309,7 +356,18 @@ fun OverviewStatsSection() {
                 change = "+6%",
                 subtitle = "Today: ৳0.00",
                 glowColor = NeonRose,
-                iconUrl = "https://img.icons8.com/?size=100&id=nBI1rs9Fp9Lm&format=png&color=000000"
+                iconUrl = "https://img.icons8.com/?size=100&id=nBI1rs9Fp9Lm&format=png&color=000000",
+                onClick = {
+                    onCardClick(
+                        CockpitModalData(
+                            title = "Total Withdrawals Record",
+                            description = "Approved payouts, pending payout requests and user settlement history.",
+                            iconUrl = "https://img.icons8.com/?size=100&id=nBI1rs9Fp9Lm&format=png&color=000000",
+                            themeColor = NeonRose,
+                            statValue = "৳57,414.00 (Today: ৳0.00)"
+                        )
+                    )
+                }
             )
             StatCardItem(
                 modifier = Modifier.weight(1f),
@@ -318,10 +376,21 @@ fun OverviewStatsSection() {
                 change = "+0%",
                 subtitle = "Completed tasks",
                 glowColor = NeonYellow,
-                iconUrl = "https://img.icons8.com/?size=100&id=5rjf4RBWzzU4&format=png&color=000000"
+                iconUrl = "https://img.icons8.com/?size=100&id=5rjf4RBWzzU4&format=png&color=000000",
+                onClick = {
+                    onCardClick(
+                        CockpitModalData(
+                            title = "Work Value Done",
+                            description = "Today's typing tasks completion value and work efficiency metrics.",
+                            iconUrl = "https://img.icons8.com/?size=100&id=5rjf4RBWzzU4&format=png&color=000000",
+                            themeColor = NeonYellow,
+                            statValue = "৳0.00 Completed"
+                        )
+                    )
+                }
             )
         }
-        // Row 3: User Profits & Asset Volume (Accept Value)
+        // Row 3
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             StatCardItem(
                 modifier = Modifier.weight(1f),
@@ -330,7 +399,18 @@ fun OverviewStatsSection() {
                 change = "+15%",
                 subtitle = "Total profits",
                 glowColor = NeonPurple,
-                iconUrl = "https://img.icons8.com/?size=100&id=9DRY12f4liKv&format=png&color=000000"
+                iconUrl = "https://img.icons8.com/?size=100&id=9DRY12f4liKv&format=png&color=000000",
+                onClick = {
+                    onCardClick(
+                        CockpitModalData(
+                            title = "User Profits Analytics",
+                            description = "Total lifetime profits earned by active users across tasks and referrals.",
+                            iconUrl = "https://img.icons8.com/?size=100&id=9DRY12f4liKv&format=png&color=000000",
+                            themeColor = NeonPurple,
+                            statValue = "৳310,073.00 Total Profit"
+                        )
+                    )
+                }
             )
             StatCardItem(
                 modifier = Modifier.weight(1f),
@@ -339,7 +419,18 @@ fun OverviewStatsSection() {
                 change = "+9%",
                 subtitle = "Total assets",
                 glowColor = NeonCyan,
-                iconUrl = "https://img.icons8.com/?size=100&id=pemtUT1YiPwP&format=png&color=000000"
+                iconUrl = "https://img.icons8.com/?size=100&id=pemtUT1YiPwP&format=png&color=000000",
+                onClick = {
+                    onCardClick(
+                        CockpitModalData(
+                            title = "Asset Volume (Accept Value)",
+                            description = "Combined wallet balances and liquid database assets.",
+                            iconUrl = "https://img.icons8.com/?size=100&id=pemtUT1YiPwP&format=png&color=000000",
+                            themeColor = NeonCyan,
+                            statValue = "৳53,496.90 In Vault"
+                        )
+                    )
+                }
             )
         }
     }
@@ -353,7 +444,8 @@ fun StatCardItem(
     change: String,
     subtitle: String,
     glowColor: Color,
-    iconUrl: String
+    iconUrl: String,
+    onClick: () -> Unit
 ) {
     Box(
         modifier = modifier
@@ -367,6 +459,7 @@ fun StatCardItem(
                 Brush.verticalGradient(listOf(glowColor, glowColor.copy(alpha = 0.25f))),
                 RoundedCornerShape(16.dp)
             )
+            .clickable { onClick() }
             .padding(10.dp)
     ) {
         Column {
@@ -375,12 +468,21 @@ fun StatCardItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AsyncImage(
-                    model = iconUrl,
-                    contentDescription = title,
-                    modifier = Modifier.size(38.dp),
-                    contentScale = ContentScale.Fit
-                )
+                // ছোট ব্যাকগ্রাউন্ড ফ্রেম ও বড় আইকন
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .background(glowColor.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                        .border(1.dp, glowColor.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = iconUrl,
+                        contentDescription = title,
+                        modifier = Modifier.size(34.dp), // বড় এবং স্পষ্ট
+                        contentScale = ContentScale.Fit
+                    )
+                }
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(title, color = TextDimGray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
@@ -420,10 +522,10 @@ fun StatCardItem(
 }
 
 // -------------------------------------------------------------
-// ৪. কমান্ড ডেক (আপনার দেওয়া সবকটি আইকন লিংক সহ)
+// ৪. কমান্ড ডেক (১০টি স্লিম কার্ড - Together We Grow সরানো হয়েছে)
 // -------------------------------------------------------------
 @Composable
-fun WorkspaceDeckSection() {
+fun WorkspaceDeckSection(onCardClick: (CockpitModalData) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -512,19 +614,41 @@ fun WorkspaceDeckSection() {
         )
     )
 
+    // ২-কলাম গ্রিডে ১০টি কার্ড সমানভাবে সাজানো হয়েছে
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (i in workspaceList.indices step 2) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                WorkspaceCardItem(modifier = Modifier.weight(1f), data = workspaceList[i])
+                WorkspaceCardItem(
+                    modifier = Modifier.weight(1f),
+                    data = workspaceList[i],
+                    onClick = {
+                        onCardClick(
+                            CockpitModalData(
+                                title = workspaceList[i].title,
+                                description = workspaceList[i].desc,
+                                iconUrl = workspaceList[i].iconUrl,
+                                themeColor = workspaceList[i].glowColor
+                            )
+                        )
+                    }
+                )
                 if (i + 1 < workspaceList.size) {
-                    WorkspaceCardItem(modifier = Modifier.weight(1f), data = workspaceList[i + 1])
+                    WorkspaceCardItem(
+                        modifier = Modifier.weight(1f),
+                        data = workspaceList[i + 1],
+                        onClick = {
+                            onCardClick(
+                                CockpitModalData(
+                                    title = workspaceList[i + 1].title,
+                                    description = workspaceList[i + 1].desc,
+                                    iconUrl = workspaceList[i + 1].iconUrl,
+                                    themeColor = workspaceList[i + 1].glowColor
+                                )
+                            )
+                        }
+                    )
                 }
             }
-        }
-        // Together We Grow Golden Chart Card
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Spacer(modifier = Modifier.weight(1f))
-            TogetherWeGrowCompactCard(modifier = Modifier.weight(1f))
         }
     }
 }
@@ -538,7 +662,11 @@ data class WorkspaceActionData(
 )
 
 @Composable
-fun WorkspaceCardItem(modifier: Modifier = Modifier, data: WorkspaceActionData) {
+fun WorkspaceCardItem(
+    modifier: Modifier = Modifier,
+    data: WorkspaceActionData,
+    onClick: () -> Unit
+) {
     Box(
         modifier = modifier
             .shadow(5.dp, RoundedCornerShape(16.dp))
@@ -551,7 +679,7 @@ fun WorkspaceCardItem(modifier: Modifier = Modifier, data: WorkspaceActionData) 
                 Brush.verticalGradient(listOf(GoldMetallicMain.copy(0.4f), Color(0xFF232634))),
                 RoundedCornerShape(16.dp)
             )
-            .clickable { }
+            .clickable { onClick() }
             .padding(10.dp)
     ) {
         if (data.badge != null) {
@@ -569,12 +697,21 @@ fun WorkspaceCardItem(modifier: Modifier = Modifier, data: WorkspaceActionData) 
         }
 
         Column {
-            AsyncImage(
-                model = data.iconUrl,
-                contentDescription = data.title,
-                modifier = Modifier.size(36.dp),
-                contentScale = ContentScale.Fit
-            )
+            // ছোট ব্যাকগ্রাউন্ড ফ্রেম ও বড় আইকন
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(data.glowColor.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                    .border(1.dp, data.glowColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = data.iconUrl,
+                    contentDescription = data.title,
+                    modifier = Modifier.size(36.dp), // বড় ও গাঢ় আইকন
+                    contentScale = ContentScale.Fit
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(data.title, color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 11.sp)
@@ -594,7 +731,7 @@ fun WorkspaceCardItem(modifier: Modifier = Modifier, data: WorkspaceActionData) 
                     .align(Alignment.End)
                     .size(20.dp)
                     .background(Color(0xFF1B1E2B), CircleShape)
-                .border(0.8.dp, GoldMetallicMain.copy(0.6f), CircleShape),
+                    .border(0.8.dp, GoldMetallicMain.copy(0.6f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = GoldMetallicLight, modifier = Modifier.size(14.dp))
@@ -603,58 +740,145 @@ fun WorkspaceCardItem(modifier: Modifier = Modifier, data: WorkspaceActionData) 
     }
 }
 
+// -------------------------------------------------------------
+// ৫. ইন্টারঅ্যাক্টিভ ৩ডি অ্যাকশন মডাল (Dialog)
+// -------------------------------------------------------------
 @Composable
-fun TogetherWeGrowCompactCard(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .shadow(8.dp, RoundedCornerShape(16.dp), spotColor = GoldMetallicMain)
-            .background(
-                Brush.verticalGradient(listOf(Color(0xFF241B0A), CardSurfaceBottom)),
-                RoundedCornerShape(16.dp)
-            )
-            .border(
-                1.2.dp,
-                Brush.verticalGradient(listOf(GoldMetallicMain, Color(0xFF4A3405))),
-                RoundedCornerShape(16.dp)
-            )
-            .padding(10.dp),
-        contentAlignment = Alignment.Center
+fun CockpitInteractiveModal(
+    data: CockpitModalData,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .shadow(24.dp, RoundedCornerShape(22.dp), ambientColor = data.themeColor, spotColor = data.themeColor)
+                .background(
+                    Brush.verticalGradient(listOf(Color(0xFF161826), Color(0xFF090A0F))),
+                    RoundedCornerShape(22.dp)
+                )
+                .border(
+                    1.4.dp,
+                    Brush.linearGradient(listOf(data.themeColor, GoldMetallicMain.copy(0.4f), data.themeColor.copy(0.2f))),
+                    RoundedCornerShape(22.dp)
+                )
+                .padding(18.dp)
         ) {
-            Text(
-                "Together\nWe Grow",
-                color = GoldMetallicLight,
-                fontWeight = FontWeight.Black,
-                fontSize = 15.sp,
-                textAlign = TextAlign.Center,
-                fontStyle = FontStyle.Italic,
-                lineHeight = 18.sp
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Canvas(modifier = Modifier.size(38.dp, 24.dp)) {
-                val barWidth = 5.dp.toPx()
-                val barGap = 3.dp.toPx()
-                val goldBrush = Brush.verticalGradient(listOf(GoldMetallicLight, GoldMetallicDark))
-                
-                drawRoundRect(brush = goldBrush, topLeft = Offset(0f, size.height * 0.6f), size = Size(barWidth, size.height * 0.4f), cornerRadius = CornerRadius(3f))
-                drawRoundRect(brush = goldBrush, topLeft = Offset(barWidth + barGap, size.height * 0.35f), size = Size(barWidth, size.height * 0.65f), cornerRadius = CornerRadius(3f))
-                drawRoundRect(brush = goldBrush, topLeft = Offset((barWidth + barGap) * 2, 0f), size = Size(barWidth, size.height), cornerRadius = CornerRadius(3f))
-
-                val arrowPath = Path().apply {
-                    moveTo(0f, size.height * 0.55f)
-                    cubicTo(size.width * 0.4f, size.height * 0.4f, size.width * 0.7f, size.height * 0.1f, size.width, 0f)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                // টপ বার
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "COMMAND WORKSPACE CONSOLE",
+                        color = GoldMetallicLight,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.2.sp
+                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(26.dp)
+                    ) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = TextDimGray, modifier = Modifier.size(18.dp))
+                    }
                 }
-                drawPath(arrowPath, color = GoldMetallicLight, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // বড় গ্লোয়িং আইকন
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .shadow(12.dp, CircleShape, spotColor = data.themeColor)
+                        .background(Brush.radialGradient(listOf(data.themeColor.copy(0.35f), Color(0xFF10121A))), CircleShape)
+                        .border(1.5.dp, data.themeColor, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = data.iconUrl,
+                        contentDescription = data.title,
+                        modifier = Modifier.size(48.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = data.title,
+                    color = TextPureWhite,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center
+                )
+
+                if (data.statValue != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = data.statValue,
+                        color = GoldMetallicLight,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = data.description,
+                    color = TextDimGray,
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 15.sp
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // অ্যাকশন বাটন
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D202D)),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFF323647))
+                    ) {
+                        Text("Dismiss", color = TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .height(40.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = data.themeColor),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Open Desk", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Black)
+                    }
+                }
             }
         }
     }
 }
 
 // -------------------------------------------------------------
-// ৫. লাক্সারি বটম নেভিগেশন বার
+// ৬. লাক্সারি বটম নেভিগেশন বার
 // -------------------------------------------------------------
 @Composable
 fun CockpitLuxuryBottomNav() {
