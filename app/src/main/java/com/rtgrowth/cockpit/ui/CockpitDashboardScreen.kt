@@ -1,6 +1,5 @@
 package com.rtgrowth.cockpit.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +9,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -18,38 +19,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 
 // ==========================================
-// 🎨 Luxury Gold & Deep 3D Neon Palette
+// 🎨 ছবির সাথে ১০০% মেলানো কালার প্যালেট
 // ==========================================
 val DarkCanvasBg = Color(0xFF07080B)
-val DarkCardSurface = Color(0xFF11131A)
-val DarkCardSurfaceEnd = Color(0xFF0B0C10)
+val CardDarkBgTop = Color(0xFF13151E)
+val CardDarkBgBottom = Color(0xFF090A0E)
 
-val MetallicGoldLight = Color(0xFFFFDF7A)
-val MetallicGold = Color(0xFFF3B737)
-val MetallicGoldDark = Color(0xFF9E7015)
+val GoldAccentBright = Color(0xFFFFD54F)
+val GoldAccentMain = Color(0xFFF3B737)
+val GoldAccentDark = Color(0xFF8D6210)
 
-// 3D Neon Accent Glow Colors
-val GlowBlue = Color(0xFF2979FF)
-val GlowGreen = Color(0xFF00E676)
-val GlowRose = Color(0xFFFF1744)
-val GlowYellow = Color(0xFFFFC400)
-val GlowPurple = Color(0xFFD500F9)
-val GlowCyan = Color(0xFF00E5FF)
+val NeonBlueBorder = Color(0xFF2979FF)
+val NeonGreenBorder = Color(0xFF00E676)
+val NeonRoseBorder = Color(0xFFFF1744)
+val NeonYellowBorder = Color(0xFFFFD600)
+val NeonPurpleBorder = Color(0xFFD500F9)
+val NeonCyanBorder = Color(0xFF00E5FF)
 
-val TextMuted = Color(0xFF8C93A4)
+val TextMutedGray = Color(0xFF8E95A5)
 val TextPureWhite = Color(0xFFFFFFFF)
 
 @Composable
@@ -64,29 +63,29 @@ fun CockpitDashboardScreen() {
                 .padding(innerPadding)
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color(0xFF13151F), DarkCanvasBg, Color(0xFF040507))
+                        colors = listOf(Color(0xFF141622), DarkCanvasBg, Color(0xFF030406))
                     )
                 )
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            // ১. টপ বার
+            // ১. টপ হেডার
             MasterCockpitTopHeader()
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // ২. ওয়েলকাম ও ডাটাবেজ ব্যানার
+            // ২. ওয়েলকাম ও ডাটাবেজ স্ট্যাটাস ব্যানার
             WelcomeDatabaseLuxuryCard()
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // ৩. ৬টি ৩ডি স্ট্যাটিস্টিক্স কার্ড
-            OverviewStatistics3DSection()
+            // ৩. ওভারভিউ স্ট্যাটিস্টিক্স (৬টি ৩ডি কার্ড)
+            OverviewStatistics3DGrid()
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // ৪. কমান্ড ডেক ও ৩ডি অ্যাকশন মেনু
-            CommandWorkspaceDeck3DSection()
+            // ৪. কমান্ড ওয়ার্কস্পেস ডেক
+            CommandWorkspaceDeck3DGrid()
 
             Spacer(modifier = Modifier.height(20.dp))
         }
@@ -94,7 +93,7 @@ fun CockpitDashboardScreen() {
 }
 
 // ==========================================
-// ১. টপ হেডার (গোল্ডেন ক্রাউন ও ব্র্যান্ডিং)
+// ১. টপ হেডার
 // ==========================================
 @Composable
 fun MasterCockpitTopHeader() {
@@ -107,70 +106,34 @@ fun MasterCockpitTopHeader() {
         Box(
             modifier = Modifier
                 .size(44.dp)
-                .shadow(6.dp, RoundedCornerShape(14.dp))
-                .background(Brush.verticalGradient(listOf(Color(0xFF1C1F2B), Color(0xFF10121A))), RoundedCornerShape(14.dp))
-                .border(1.2.dp, Brush.linearGradient(listOf(MetallicGold.copy(0.6f), Color.Transparent)), RoundedCornerShape(14.dp)),
+                .shadow(8.dp, RoundedCornerShape(14.dp))
+                .background(Brush.verticalGradient(listOf(Color(0xFF1D202D), Color(0xFF10121A))), RoundedCornerShape(14.dp))
+                .border(1.2.dp, GoldAccentMain.copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Rounded.Menu, contentDescription = "Menu", tint = MetallicGold, modifier = Modifier.size(24.dp))
+            Icon(Icons.Rounded.Menu, contentDescription = "Menu", tint = GoldAccentBright, modifier = Modifier.size(24.dp))
         }
 
-        // লোগো
+        // লোগো (গোল্ডেন ৩ডি ক্রাউন ও RT)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .shadow(10.dp, CircleShape, ambientColor = MetallicGold, spotColor = MetallicGold)
+                    .size(50.dp)
+                    .shadow(12.dp, CircleShape, ambientColor = GoldAccentMain, spotColor = GoldAccentMain)
                     .background(Color.Black, CircleShape)
-                    .border(2.dp, Brush.sweepGradient(listOf(MetallicGoldLight, MetallicGoldDark, MetallicGoldLight)), CircleShape),
+                    .border(2.dp, Brush.sweepGradient(listOf(GoldAccentBright, GoldAccentDark, GoldAccentBright)), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Canvas(modifier = Modifier.size(14.dp, 10.dp)) {
-                        val path = Path().apply {
-                            moveTo(0f, size.height)
-                            lineTo(0f, 2f)
-                            lineTo(size.width * 0.25f, size.height * 0.5f)
-                            lineTo(size.width * 0.5f, 0f)
-                            lineTo(size.width * 0.75f, size.height * 0.5f)
-                            lineTo(size.width, 2f)
-                            lineTo(size.width, size.height)
-                            close()
-                        }
-                        drawPath(path, color = MetallicGoldLight)
-                    }
-                    Text(
-                        "RT",
-                        color = MetallicGoldLight,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 15.sp,
-                        letterSpacing = 0.5.sp
-                    )
+                    Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = GoldAccentBright, modifier = Modifier.size(14.dp))
+                    Text("RT", color = GoldAccentBright, fontWeight = FontWeight.Black, fontSize = 16.sp, letterSpacing = 1.sp)
                 }
             }
             Spacer(modifier = Modifier.width(10.dp))
             Column {
-                Text(
-                    "RT GROWTH",
-                    color = MetallicGold,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 18.sp,
-                    letterSpacing = 1.sp
-                )
-                Text(
-                    "COCKPIT",
-                    color = TextPureWhite,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 13.sp,
-                    letterSpacing = 2.5.sp
-                )
-                Text(
-                    "MASTER COMMAND HUB",
-                    color = MetallicGold.copy(alpha = 0.7f),
-                    fontSize = 8.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp
-                )
+                Text("RT GROWTH", color = GoldAccentMain, fontWeight = FontWeight.Black, fontSize = 19.sp, letterSpacing = 1.sp)
+                Text("COCKPIT", color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 13.sp, letterSpacing = 3.sp)
+                Text("MASTER COMMAND HUB", color = GoldAccentMain.copy(alpha = 0.75f), fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
             }
         }
 
@@ -179,17 +142,17 @@ fun MasterCockpitTopHeader() {
             Box(
                 modifier = Modifier
                     .size(42.dp)
-                    .background(Brush.verticalGradient(listOf(Color(0xFF1E212D), Color(0xFF10121A))), CircleShape)
-                    .border(1.2.dp, MetallicGold.copy(0.4f), CircleShape),
+                    .background(Color(0xFF161823), CircleShape)
+                    .border(1.2.dp, GoldAccentMain.copy(0.4f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.Notifications, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(22.dp))
+                Icon(Icons.Rounded.Notifications, contentDescription = null, tint = GoldAccentBright, modifier = Modifier.size(22.dp))
                 Box(
                     modifier = Modifier
                         .size(10.dp)
                         .align(Alignment.TopEnd)
                         .offset(x = (-3).dp, y = 3.dp)
-                        .background(GlowRose, CircleShape)
+                        .background(NeonRoseBorder, CircleShape)
                         .border(1.5.dp, Color.Black, CircleShape)
                 )
             }
@@ -197,11 +160,11 @@ fun MasterCockpitTopHeader() {
             Box(
                 modifier = Modifier
                     .size(42.dp)
-                    .background(Brush.verticalGradient(listOf(Color(0xFF1E212D), Color(0xFF10121A))), CircleShape)
-                    .border(1.2.dp, MetallicGold.copy(0.4f), CircleShape),
+                    .background(Color(0xFF161823), CircleShape)
+                    .border(1.2.dp, GoldAccentMain.copy(0.4f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Rounded.Person, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(22.dp))
+                Icon(Icons.Rounded.Person, contentDescription = null, tint = GoldAccentBright, modifier = Modifier.size(22.dp))
             }
         }
     }
@@ -215,15 +178,15 @@ fun WelcomeDatabaseLuxuryCard() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(12.dp, RoundedCornerShape(20.dp), ambientColor = MetallicGold.copy(0.2f))
+            .shadow(12.dp, RoundedCornerShape(22.dp), ambientColor = GoldAccentMain.copy(0.2f))
             .background(
-                Brush.verticalGradient(listOf(Color(0xFF181A24), DarkCardSurfaceEnd)),
-                RoundedCornerShape(20.dp)
+                Brush.verticalGradient(listOf(Color(0xFF181B26), CardDarkBgBottom)),
+                RoundedCornerShape(22.dp)
             )
             .border(
                 1.5.dp,
-                Brush.horizontalGradient(listOf(MetallicGold, Color(0xFF5A4108), MetallicGold)),
-                RoundedCornerShape(20.dp)
+                Brush.horizontalGradient(listOf(GoldAccentMain, Color(0xFF533B07), GoldAccentMain)),
+                RoundedCornerShape(22.dp)
             )
             .padding(14.dp)
     ) {
@@ -232,35 +195,29 @@ fun WelcomeDatabaseLuxuryCard() {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Admin Info with 3D Gold Crown
+            // Admin Info with 3D Crown Orb
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
-                        .size(50.dp)
-                        .background(
-                            Brush.radialGradient(listOf(MetallicGold.copy(0.35f), Color.Transparent)),
-                            CircleShape
-                        )
-                        .border(1.5.dp, MetallicGold, CircleShape),
+                        .size(52.dp)
+                        .background(Brush.radialGradient(listOf(GoldAccentMain.copy(0.35f), Color.Transparent)), CircleShape)
+                        .border(1.5.dp, GoldAccentMain, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .background(
-                                Brush.verticalGradient(listOf(MetallicGoldLight, MetallicGoldDark)),
-                                CircleShape
-                            ),
+                            .size(38.dp)
+                            .background(Brush.verticalGradient(listOf(GoldAccentBright, GoldAccentDark)), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = Color.Black, modifier = Modifier.size(22.dp))
                     }
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
-                    Text("Welcome Back,", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                    Text("Admin", color = MetallicGoldLight, fontSize = 17.sp, fontWeight = FontWeight.Black)
-                    Text("Have a great day!", color = TextMuted, fontSize = 10.sp)
+                    Text("Welcome Back,", color = TextMutedGray, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                    Text("Admin", color = GoldAccentBright, fontSize = 17.sp, fontWeight = FontWeight.Black)
+                    Text("Have a great day!", color = TextMutedGray, fontSize = 10.sp)
                 }
             }
 
@@ -268,8 +225,8 @@ fun WelcomeDatabaseLuxuryCard() {
             Box(
                 modifier = Modifier
                     .width(1.dp)
-                    .height(44.dp)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xFF4A4E61), Color.Transparent)))
+                    .height(46.dp)
+                    .background(Color(0xFF323647))
             )
 
             // Database Info with 3D Cylinder
@@ -279,130 +236,130 @@ fun WelcomeDatabaseLuxuryCard() {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Brush.horizontalGradient(listOf(Color(0xFF00381C), Color(0xFF006B35))))
-                        .border(1.dp, GlowGreen, RoundedCornerShape(20.dp))
+                        .background(Color(0xFF00381C))
+                        .border(1.dp, NeonGreenBorder, RoundedCornerShape(20.dp))
                         .padding(horizontal = 10.dp, vertical = 3.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(6.dp).background(GlowGreen, CircleShape))
+                        Box(modifier = Modifier.size(6.dp).background(NeonGreenBorder, CircleShape))
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text("Connected", color = GlowGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("Connected", color = NeonGreenBorder, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
                 Spacer(modifier = Modifier.height(3.dp))
-                Text("typing-5c3e4-default-rtdb", color = TextMuted, fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
+                Text("typing-5c3e4-default-rtdb", color = TextMutedGray, fontSize = 9.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace)
             }
         }
     }
 }
 
 // ==========================================
-// ৩. ওভারভিউ স্ট্যাটিস্টিক্স সেকশন (৬টি ৩ডি কার্ড)
+// ৩. ওভারভিউ স্ট্যাটিস্টিক্স গ্রিড (৬টি ৩ডি কার্ড)
 // ==========================================
 @Composable
-fun OverviewStatistics3DSection() {
+fun OverviewStatistics3DGrid() {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.BarChart, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(20.dp))
+            Icon(Icons.Rounded.BarChart, contentDescription = null, tint = GoldAccentMain, modifier = Modifier.size(20.dp))
             Spacer(modifier = Modifier.width(6.dp))
             Text("Overview Statistics", color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 14.sp)
         }
-        Text("Oct 5, 2026 | 02:03 PM", color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+        Text("Oct 5, 2026 | 02:03 PM", color = TextMutedGray, fontSize = 10.sp, fontWeight = FontWeight.Medium)
     }
 
     Spacer(modifier = Modifier.height(10.dp))
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // Row 1
+        // Row 1: Users & Deposit
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Stat3DCard(
+            Stat3DGlossyCard(
                 modifier = Modifier.weight(1f),
                 title = "Total Users",
                 value = "919",
-                percentage = "+12%",
+                change = "+12%",
                 subtitle = "Active accounts",
-                accentGlow = GlowBlue,
-                iconType = "users"
+                borderColor = NeonBlueBorder,
+                imageUrl = "https://cdn3d.iconscout.com/3d/premium/thumb/user-group-5527370-4621251.png"
             )
-            Stat3DCard(
+            Stat3DGlossyCard(
                 modifier = Modifier.weight(1f),
                 title = "Total Deposit",
                 value = "৳64,597.00",
-                percentage = "+8%",
+                change = "+8%",
                 subtitle = "Today: ৳0.00",
-                accentGlow = GlowGreen,
-                iconType = "deposit"
+                borderColor = NeonGreenBorder,
+                imageUrl = "https://cdn3d.iconscout.com/3d/premium/thumb/wallet-with-coins-5591321-4663953.png"
             )
         }
-        // Row 2
+        // Row 2: Withdraw & Work Done
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Stat3DCard(
+            Stat3DGlossyCard(
                 modifier = Modifier.weight(1f),
                 title = "Total Withdraw",
                 value = "৳57,414.00",
-                percentage = "+6%",
+                change = "+6%",
                 subtitle = "Today: ৳0.00",
-                accentGlow = GlowRose,
-                iconType = "withdraw"
+                borderColor = NeonRoseBorder,
+                imageUrl = "https://cdn3d.iconscout.com/3d/premium/thumb/money-stack-5527364-4621245.png"
             )
-            Stat3DCard(
+            Stat3DGlossyCard(
                 modifier = Modifier.weight(1f),
                 title = "Work Value Done",
                 value = "৳0.00",
-                percentage = "+0%",
+                change = "+0%",
                 subtitle = "Completed tasks",
-                accentGlow = GlowYellow,
-                iconType = "work"
+                borderColor = NeonYellowBorder,
+                imageUrl = "https://cdn3d.iconscout.com/3d/premium/thumb/flash-5590924-4663675.png"
             )
         }
-        // Row 3
+        // Row 3: Profits & Assets
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Stat3DCard(
+            Stat3DGlossyCard(
                 modifier = Modifier.weight(1f),
                 title = "User Profits",
                 value = "৳310,073.00",
-                percentage = "+15%",
+                change = "+15%",
                 subtitle = "Total profits",
-                accentGlow = GlowPurple,
-                iconType = "profits"
+                borderColor = NeonPurpleBorder,
+                imageUrl = "https://cdn3d.iconscout.com/3d/premium/thumb/growth-chart-5527369-4621250.png"
             )
-            Stat3DCard(
+            Stat3DGlossyCard(
                 modifier = Modifier.weight(1f),
                 title = "Asset Volume",
                 value = "৳53,496.90",
-                percentage = "+9%",
+                change = "+9%",
                 subtitle = "Total assets",
-                accentGlow = GlowCyan,
-                iconType = "assets"
+                borderColor = NeonCyanBorder,
+                imageUrl = "https://cdn3d.iconscout.com/3d/premium/thumb/safe-box-5590918-4663669.png"
             )
         }
     }
 }
 
 @Composable
-fun Stat3DCard(
+fun Stat3DGlossyCard(
     modifier: Modifier = Modifier,
     title: String,
     value: String,
-    percentage: String,
+    change: String,
     subtitle: String,
-    accentGlow: Color,
-    iconType: String
+    borderColor: Color,
+    imageUrl: String
 ) {
     Box(
         modifier = modifier
-            .shadow(10.dp, RoundedCornerShape(18.dp), ambientColor = accentGlow.copy(0.3f), spotColor = accentGlow)
+            .shadow(10.dp, RoundedCornerShape(18.dp), spotColor = borderColor)
             .background(
-                Brush.verticalGradient(listOf(Color(0xFF161823), DarkCardSurfaceEnd)),
+                Brush.verticalGradient(listOf(Color(0xFF161824), CardDarkBgBottom)),
                 RoundedCornerShape(18.dp)
             )
             .border(
                 1.3.dp,
-                Brush.verticalGradient(listOf(accentGlow.copy(0.8f), accentGlow.copy(0.2f))),
+                Brush.verticalGradient(listOf(borderColor.copy(0.85f), borderColor.copy(0.2f))),
                 RoundedCornerShape(18.dp)
             )
             .padding(12.dp)
@@ -413,11 +370,16 @@ fun Stat3DCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 3D Glossy Icon Box
-                Glossy3DIcon(iconType = iconType, glowColor = accentGlow)
+                // 3D Rendered Asset Image
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = title,
+                    modifier = Modifier.size(46.dp),
+                    contentScale = ContentScale.Fit
+                )
 
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(title, color = TextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text(title, color = TextMutedGray, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         value,
@@ -437,57 +399,19 @@ fun Stat3DCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Fixed Arrow Upward Icon (No more broken "ij" glitch)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Filled.ArrowUpward,
                         contentDescription = null,
-                        tint = accentGlow,
+                        tint = borderColor,
                         modifier = Modifier.size(11.dp)
                     )
                     Spacer(modifier = Modifier.width(2.dp))
-                    Text(percentage, color = accentGlow, fontSize = 10.sp, fontWeight = FontWeight.Black)
+                    Text(change, color = borderColor, fontSize = 10.sp, fontWeight = FontWeight.Black)
                 }
-                Text(subtitle, color = TextMuted, fontSize = 9.sp, fontWeight = FontWeight.Medium)
+                Text(subtitle, color = TextMutedGray, fontSize = 9.sp, fontWeight = FontWeight.Medium)
             }
         }
-    }
-}
-
-// ৩ডি গ্লসি আইকন কম্পোনেন্ট
-@Composable
-fun Glossy3DIcon(iconType: String, glowColor: Color) {
-    Box(
-        modifier = Modifier
-            .size(42.dp)
-            .shadow(8.dp, RoundedCornerShape(12.dp), spotColor = glowColor)
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        glowColor.copy(alpha = 0.85f),
-                        glowColor.copy(alpha = 0.4f),
-                        Color(0xFF0D0F17)
-                    )
-                ),
-                RoundedCornerShape(12.dp)
-            )
-            .border(
-                1.dp,
-                Brush.verticalGradient(listOf(Color.White.copy(0.6f), Color.Transparent)),
-                RoundedCornerShape(12.dp)
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        val (icon, tint) = when (iconType) {
-            "users" -> Icons.Rounded.Groups to Color.White
-            "deposit" -> Icons.Rounded.AccountBalanceWallet to Color(0xFFFFD54F)
-            "withdraw" -> Icons.Rounded.Payments to Color(0xFFFF80AB)
-            "work" -> Icons.Rounded.Bolt to Color(0xFFFFEA00)
-            "profits" -> Icons.Rounded.TrendingUp to Color(0xFFEA80FC)
-            "assets" -> Icons.Rounded.Lock to Color(0xFF80D8FF)
-            else -> Icons.Rounded.Star to Color.White
-        }
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
     }
 }
 
@@ -495,33 +419,33 @@ fun Glossy3DIcon(iconType: String, glowColor: Color) {
 // ৪. কমান্ড ডেক ও ৩ডি অ্যাকশন মেনু
 // ==========================================
 @Composable
-fun CommandWorkspaceDeck3DSection() {
+fun CommandWorkspaceDeck3DGrid() {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.GridView, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(18.dp))
+            Icon(Icons.Rounded.GridView, contentDescription = null, tint = GoldAccentMain, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
             Text("Command Workspace Deck", color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 13.sp)
         }
-        Text("Manage • Monitor • Grow", color = MetallicGoldDark, fontSize = 10.sp, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold)
+        Text("Manage • Monitor • Grow", color = GoldAccentDark, fontSize = 10.sp, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold)
     }
 
     Spacer(modifier = Modifier.height(12.dp))
 
     val workspaceList = listOf(
-        WorkspaceActionItem("User Directory", "Manage users, profiles and account activity.", "users", GlowBlue, null),
-        WorkspaceActionItem("Deposits", "Review and manage deposit requests.", "deposit", GlowYellow, null),
-        WorkspaceActionItem("Withdrawals", "Pending withdrawal requests.", "withdraw", GlowGreen, 2),
-        WorkspaceActionItem("Send Money Req", "Handle transfer requests.", "send", GlowBlue, 0),
-        WorkspaceActionItem("Recharges", "Mobile & wallet recharge requests.", "recharge", GlowYellow, 0),
-        WorkspaceActionItem("Gift Vouchers", "Create and manage voucher codes.", "gift", GlowRose, 31),
-        WorkspaceActionItem("Typing Tasks", "Create tasks and review submissions.", "typing", GlowPurple, 0),
-        WorkspaceActionItem("Support Chat", "View conversations and reply to users.", "chat", GlowCyan, 3),
-        WorkspaceActionItem("Balance Reset", "Authorized balance correction tools.", "reset", GlowRose, null),
-        WorkspaceActionItem("System Settings", "Configure security, notifications and database.", "settings", GlowCyan, null)
+        Workspace3DItem("User Directory", "Manage users, profiles and account activity.", "https://cdn3d.iconscout.com/3d/premium/thumb/user-profile-5527362-4621243.png", null),
+        Workspace3DItem("Deposits", "Review and manage deposit requests.", "https://cdn3d.iconscout.com/3d/premium/thumb/wallet-5527367-4621248.png", null),
+        Workspace3DItem("Withdrawals", "Pending withdrawal requests.", "https://cdn3d.iconscout.com/3d/premium/thumb/money-5527363-4621244.png", 2),
+        Workspace3DItem("Send Money Req", "Handle transfer requests.", "https://cdn3d.iconscout.com/3d/premium/thumb/paper-plane-5527359-4621240.png", 0),
+        Workspace3DItem("Recharges", "Mobile & wallet recharge requests.", "https://cdn3d.iconscout.com/3d/premium/thumb/smartphone-5527366-4621247.png", 0),
+        Workspace3DItem("Gift Vouchers", "Create and manage voucher codes.", "https://cdn3d.iconscout.com/3d/premium/thumb/gift-box-5527368-4621249.png", 31),
+        Workspace3DItem("Typing Tasks", "Create tasks and review submissions.", "https://cdn3d.iconscout.com/3d/premium/thumb/keyboard-5527365-4621246.png", 0),
+        Workspace3DItem("Support Chat", "View conversations and reply to users.", "https://cdn3d.iconscout.com/3d/premium/thumb/headphone-5527360-4621241.png", 3),
+        Workspace3DItem("Balance Reset", "Authorized balance correction tools.", "https://cdn3d.iconscout.com/3d/premium/thumb/refresh-5527361-4621242.png", null),
+        Workspace3DItem("System Settings", "Configure security, notifications and database.", "https://cdn3d.iconscout.com/3d/premium/thumb/setting-5527358-4621239.png", null)
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -533,34 +457,33 @@ fun CommandWorkspaceDeck3DSection() {
                 }
             }
         }
-        // Together We Grow Golden Chart Card
+        // Together We Grow Golden Banner
         Row(modifier = Modifier.fillMaxWidth()) {
             Spacer(modifier = Modifier.weight(1f))
-            TogetherWeGrow3DCard(modifier = Modifier.weight(1f))
+            TogetherWeGrowGoldenCard(modifier = Modifier.weight(1f))
         }
     }
 }
 
-data class WorkspaceActionItem(
+data class Workspace3DItem(
     val title: String,
     val desc: String,
-    val iconType: String,
-    val glowColor: Color,
+    val imageUrl: String,
     val badge: Int?
 )
 
 @Composable
-fun Workspace3DCard(modifier: Modifier = Modifier, item: WorkspaceActionItem) {
+fun Workspace3DCard(modifier: Modifier = Modifier, item: Workspace3DItem) {
     Box(
         modifier = modifier
             .shadow(6.dp, RoundedCornerShape(18.dp))
             .background(
-                Brush.verticalGradient(listOf(Color(0xFF161822), DarkCardSurfaceEnd)),
+                Brush.verticalGradient(listOf(Color(0xFF161822), CardDarkBgBottom)),
                 RoundedCornerShape(18.dp)
             )
             .border(
                 1.2.dp,
-                Brush.verticalGradient(listOf(MetallicGold.copy(0.4f), Color(0xFF262A38))),
+                Brush.verticalGradient(listOf(GoldAccentMain.copy(0.45f), Color(0xFF262A38))),
                 RoundedCornerShape(18.dp)
             )
             .clickable { }
@@ -572,9 +495,9 @@ fun Workspace3DCard(modifier: Modifier = Modifier, item: WorkspaceActionItem) {
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .size(20.dp)
-                    .shadow(6.dp, CircleShape, spotColor = GlowRose)
-                    .background(if (item.badge > 0) GlowRose else Color(0xFF651FFF), CircleShape)
-                    .border(1.dp, Color.White.copy(0.6f), CircleShape),
+                    .shadow(6.dp, CircleShape, spotColor = NeonRoseBorder)
+                    .background(if (item.badge > 0) NeonRoseBorder else Color(0xFF651FFF), CircleShape)
+                    .border(1.dp, Color.White.copy(0.7f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text("${item.badge}", color = Color.White, fontSize = 9.5.sp, fontWeight = FontWeight.Black)
@@ -582,14 +505,19 @@ fun Workspace3DCard(modifier: Modifier = Modifier, item: WorkspaceActionItem) {
         }
 
         Column {
-            Glossy3DIcon(iconType = item.iconType, glowColor = item.glowColor)
+            AsyncImage(
+                model = item.imageUrl,
+                contentDescription = item.title,
+                modifier = Modifier.size(44.dp),
+                contentScale = ContentScale.Fit
+            )
 
             Spacer(modifier = Modifier.height(10.dp))
             Text(item.title, color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             Spacer(modifier = Modifier.height(3.dp))
             Text(
                 item.desc,
-                color = TextMuted,
+                color = TextMutedGray,
                 fontSize = 9.sp,
                 lineHeight = 12.sp,
                 maxLines = 2,
@@ -602,27 +530,27 @@ fun Workspace3DCard(modifier: Modifier = Modifier, item: WorkspaceActionItem) {
                     .align(Alignment.End)
                     .size(24.dp)
                     .background(Color(0xFF1B1E2B), CircleShape)
-                    .border(1.dp, MetallicGold.copy(0.6f), CircleShape),
+                    .border(1.dp, GoldAccentMain.copy(0.6f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(16.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForwardIos, contentDescription = null, tint = GoldAccentBright, modifier = Modifier.size(10.dp))
             }
         }
     }
 }
 
 @Composable
-fun TogetherWeGrow3DCard(modifier: Modifier = Modifier) {
+fun TogetherWeGrowGoldenCard(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .shadow(8.dp, RoundedCornerShape(18.dp), spotColor = MetallicGold)
+            .shadow(10.dp, RoundedCornerShape(18.dp), spotColor = GoldAccentMain)
             .background(
-                Brush.verticalGradient(listOf(Color(0xFF241C0A), DarkCardSurfaceEnd)),
+                Brush.verticalGradient(listOf(Color(0xFF241C0A), CardDarkBgBottom)),
                 RoundedCornerShape(18.dp)
             )
             .border(
                 1.3.dp,
-                Brush.verticalGradient(listOf(MetallicGold, Color(0xFF4A3405))),
+                Brush.verticalGradient(listOf(GoldAccentMain, Color(0xFF4A3405))),
                 RoundedCornerShape(18.dp)
             )
             .padding(14.dp),
@@ -634,7 +562,7 @@ fun TogetherWeGrow3DCard(modifier: Modifier = Modifier) {
         ) {
             Text(
                 "Together\nWe Grow",
-                color = MetallicGoldLight,
+                color = GoldAccentBright,
                 fontWeight = FontWeight.Black,
                 fontSize = 17.sp,
                 textAlign = TextAlign.Center,
@@ -642,7 +570,7 @@ fun TogetherWeGrow3DCard(modifier: Modifier = Modifier) {
                 lineHeight = 20.sp
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Icon(Icons.Rounded.TrendingUp, contentDescription = null, tint = MetallicGold, modifier = Modifier.size(36.dp))
+            Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, tint = GoldAccentBright, modifier = Modifier.size(36.dp))
         }
     }
 }
@@ -665,7 +593,7 @@ fun CockpitLuxuryBottomNav() {
         tonalElevation = 10.dp,
         modifier = Modifier.border(
             1.2.dp,
-            Brush.horizontalGradient(listOf(Color.Transparent, MetallicGold.copy(0.4f), Color.Transparent)),
+            Brush.horizontalGradient(listOf(Color.Transparent, GoldAccentMain.copy(0.4f), Color.Transparent)),
             RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
         )
     ) {
@@ -679,7 +607,7 @@ fun CockpitLuxuryBottomNav() {
                         modifier = Modifier
                             .size(if (isSelected) 36.dp else 28.dp)
                             .background(
-                                if (isSelected) MetallicGold.copy(0.2f) else Color.Transparent,
+                                if (isSelected) GoldAccentMain.copy(0.2f) else Color.Transparent,
                                 CircleShape
                             ),
                         contentAlignment = Alignment.Center
@@ -687,7 +615,7 @@ fun CockpitLuxuryBottomNav() {
                         Icon(
                             item.second,
                             contentDescription = item.first,
-                            tint = if (isSelected) MetallicGoldLight else TextMuted,
+                            tint = if (isSelected) GoldAccentBright else TextMutedGray,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -695,7 +623,7 @@ fun CockpitLuxuryBottomNav() {
                 label = {
                     Text(
                         item.first,
-                        color = if (isSelected) MetallicGoldLight else TextMuted,
+                        color = if (isSelected) GoldAccentBright else TextMutedGray,
                         fontSize = 10.sp,
                         fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal
                     )
