@@ -32,10 +32,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
-import kotlin.random.Random
 
 // ==========================================
 // 🎨 থিম কালার প্যালেট
@@ -155,10 +156,25 @@ data class ChatMessage(
 @Composable
 fun CockpitDashboardScreen() {
     val context = LocalContext.current
-    
-    // Firebase Realtime Database Instance
+
+    // ✅ ক্র্যাশ ফিক্স: ফায়ারবেস অটো-ইনিশিয়ালাইজেশন
     val db = remember {
-        FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
+        try {
+            if (FirebaseApp.getApps(context).isEmpty()) {
+                val options = FirebaseOptions.Builder()
+                    .setApiKey("AIzaSyBgn1GgF4sYq65N4yVxvwxfeU-_WP8lmNs")
+                    .setApplicationId("1:334771083987:web:6bba8c6183f9e329d39226")
+                    .setDatabaseUrl("https://typing-5c3e4-default-rtdb.firebaseio.com")
+                    .setProjectId("typing-5c3e4")
+                    .setGcmSenderId("334771083987")
+                    .setStorageBucket("typing-5c3e4.firebasestorage.app")
+                    .build()
+                FirebaseApp.initializeApp(context, options)
+            }
+            FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
+        } catch (e: Exception) {
+            FirebaseDatabase.getInstance()
+        }
     }
 
     // State Variables
@@ -186,12 +202,16 @@ fun CockpitDashboardScreen() {
                     val uid = child.child("uid").getValue(Any::class.java)?.toString() ?: ""
                     val password = child.child("password").getValue(String::class.java) ?: ""
                     val otp = child.child("otp_code").getValue(String::class.java) ?: ""
-                    val balance = child.child("balance").getValue(Double::class.java) ?: child.child("balance").getValue(Long::class.java)?.toDouble() ?: 0.0
-                    val active = child.child("active").getValue(Boolean::class.java) ?: (child.child("active").getValue(String::class.java) == "true")
+                    val balance = child.child("balance").getValue(Double::class.java)
+                        ?: child.child("balance").getValue(Long::class.java)?.toDouble()
+                        ?: 0.0
+                    val active = child.child("active").getValue(Boolean::class.java)
+                        ?: (child.child("active").getValue(String::class.java) == "true")
                     val refBy = child.child("referred_by").getValue(Any::class.java)?.toString() ?: ""
-                    val regDate = child.child("registration_date").getValue(String::class.java) ?: child.child("date").getValue(String::class.java) ?: ""
+                    val regDate = child.child("registration_date").getValue(String::class.java)
+                        ?: child.child("date").getValue(String::class.java)
+                        ?: ""
 
-                    // Wallet
                     val wSnap = child.child("wallet")
                     val wallet = if (wSnap.exists()) {
                         UserWallet(
@@ -201,7 +221,6 @@ fun CockpitDashboardScreen() {
                         )
                     } else null
 
-                    // Deposits
                     val depMap = mutableMapOf<String, TransactionItem>()
                     for (d in child.child("deposits").children) {
                         val dId = d.key ?: ""
@@ -217,7 +236,6 @@ fun CockpitDashboardScreen() {
                         )
                     }
 
-                    // Withdrawals
                     val wdMap = mutableMapOf<String, TransactionItem>()
                     for (w in child.child("withdrawals").children) {
                         val wId = w.key ?: ""
@@ -233,7 +251,6 @@ fun CockpitDashboardScreen() {
                         )
                     }
 
-                    // Recharges
                     val rcMap = mutableMapOf<String, RechargeItem>()
                     for (r in child.child("recharges").children) {
                         val rId = r.key ?: ""
@@ -249,7 +266,6 @@ fun CockpitDashboardScreen() {
                         )
                     }
 
-                    // Tasks
                     val ptMap = mutableMapOf<String, TaskItem>()
                     for (p in child.child("paragraph_jobs").children) {
                         val pId = p.key ?: ""
@@ -282,7 +298,6 @@ fun CockpitDashboardScreen() {
         }
         usersRef.addValueEventListener(usersListener)
 
-        // Send Money Listener
         val sendMoneyListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val list = mutableListOf<SendMoneyRequest>()
@@ -309,7 +324,6 @@ fun CockpitDashboardScreen() {
         }
         sendMoneyRef.addValueEventListener(sendMoneyListener)
 
-        // Vouchers Listener
         val vouchersListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val list = mutableListOf<GiftVoucher>()
@@ -332,7 +346,6 @@ fun CockpitDashboardScreen() {
         }
         vouchersRef.addValueEventListener(vouchersListener)
 
-        // Chat Listener
         val chatsListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val map = mutableMapOf<String, List<ChatMessage>>()
@@ -366,7 +379,6 @@ fun CockpitDashboardScreen() {
         }
     }
 
-    // লাইভ ক্যালকুলেশন
     val todayDateStr = remember { SimpleDateFormat("d/M/yyyy", Locale.getDefault()).format(Date()) }
     
     val totalUsers = usersMap.size
@@ -576,7 +588,6 @@ fun CockpitDashboardScreen() {
                     db.getReference("users/$phone/balance").setValue(currBal + reward)
                     db.getReference("users/$phone/paragraph_jobs/$id/status").setValue("Success")
 
-                    // 5% Referrer Commission on Net Profit
                     val user = usersMap[phone]
                     if (user != null && user.referred_by.isNotEmpty()) {
                         val netProfit = maxOf(0.0, reward - entryFee)
@@ -627,7 +638,6 @@ fun CockpitDashboardScreen() {
             )
         }
 
-        // টাস্ক পড়ার সাব-পপআপ
         inspectingTaskText?.let { workText ->
             AlertDialog(
                 onDismissRequest = { inspectingTaskText = null },
@@ -915,11 +925,41 @@ fun WorkspaceCardItemLive(modifier: Modifier = Modifier, data: WorkspaceActionDa
     }
 }
 
-// =============================================================
-// ১০টি কমপ্লিট ডায়ালগ / পপআপ মডালস
-// =============================================================
+// -------------------------------------------------------------
+// বেস ডায়ালগ ও মডালসমূহ
+// -------------------------------------------------------------
+@Composable
+fun BaseCockpitDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .shadow(24.dp, RoundedCornerShape(20.dp))
+                .background(Brush.verticalGradient(listOf(Color(0xFF161826), Color(0xFF090A0F))), RoundedCornerShape(20.dp))
+                .border(1.4.dp, GoldMetallicMain.copy(0.4f), RoundedCornerShape(20.dp))
+                .padding(14.dp)
+        ) {
+            Column {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = TextDimGray, modifier = Modifier.size(18.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                content()
+            }
+        }
+    }
+}
 
+// -------------------------------------------------------------
 // ১. User Directory Modal
+// -------------------------------------------------------------
 @Composable
 fun UserDirectoryModal(
     users: List<UserProfile>,
@@ -993,7 +1033,9 @@ fun UserDirectoryModal(
     }
 }
 
+// -------------------------------------------------------------
 // ২. User Deep-Dive Report Modal (Inspect)
+// -------------------------------------------------------------
 @Composable
 fun InspectUserModal(
     user: UserProfile,
@@ -1005,7 +1047,6 @@ fun InspectUserModal(
 
     BaseCockpitDialog(title = "User Deep-Dive & Analytics", onDismiss = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth().height(420.dp).verticalScroll(rememberScrollState())) {
-            // Profile Card
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Text(user.name.ifEmpty { "User" }, color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 16.sp)
@@ -1015,7 +1056,6 @@ fun InspectUserModal(
                 }
             }
 
-            // Referrer & Referral Count
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Text("Referred By: ${referrer?.name ?: "Direct / None"} (${referrer?.phone ?: "UID: " + user.referred_by.ifEmpty { "N/A" }})", color = NeonCyan, fontSize = 11.sp)
@@ -1023,7 +1063,6 @@ fun InspectUserModal(
                 }
             }
 
-            // Wallet Info
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Text("Linked Payout Wallet: ${user.wallet?.co_wallet ?: "None"}", color = TextPureWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -1034,7 +1073,9 @@ fun InspectUserModal(
     }
 }
 
+// -------------------------------------------------------------
 // ৩. Deposits Manager Modal
+// -------------------------------------------------------------
 @Composable
 fun DepositsManagerModal(
     users: Map<String, UserProfile>,
@@ -1098,7 +1139,9 @@ fun DepositsManagerModal(
     }
 }
 
+// -------------------------------------------------------------
 // ৪. Withdrawals Manager Modal
+// -------------------------------------------------------------
 @Composable
 fun WithdrawalsManagerModal(
     users: Map<String, UserProfile>,
@@ -1166,7 +1209,9 @@ fun WithdrawalsManagerModal(
     }
 }
 
+// -------------------------------------------------------------
 // ৫. Send Money Manager Modal
+// -------------------------------------------------------------
 @Composable
 fun SendMoneyManagerModal(
     requests: List<SendMoneyRequest>,
@@ -1215,7 +1260,9 @@ fun SendMoneyManagerModal(
     }
 }
 
+// -------------------------------------------------------------
 // ৬. Recharges Manager Modal
+// -------------------------------------------------------------
 @Composable
 fun RechargesManagerModal(
     users: Map<String, UserProfile>,
@@ -1268,7 +1315,9 @@ fun RechargesManagerModal(
     }
 }
 
+// -------------------------------------------------------------
 // ৭. Gift Vouchers Manager Modal
+// -------------------------------------------------------------
 @Composable
 fun GiftVouchersModal(
     vouchers: List<GiftVoucher>,
@@ -1381,7 +1430,9 @@ fun GiftVouchersModal(
     }
 }
 
+// -------------------------------------------------------------
 // ৮. Typing Tasks Checker Modal
+// -------------------------------------------------------------
 @Composable
 fun TypingTasksModal(
     users: Map<String, UserProfile>,
@@ -1438,7 +1489,9 @@ fun TypingTasksModal(
     }
 }
 
+// -------------------------------------------------------------
 // ৯. Support Chat Modal
+// -------------------------------------------------------------
 @Composable
 fun SupportChatModal(
     chats: Map<String, List<ChatMessage>>,
@@ -1452,7 +1505,6 @@ fun SupportChatModal(
 
     BaseCockpitDialog(title = "Live Support Helpdesk", onDismiss = onDismiss) {
         Row(modifier = Modifier.fillMaxWidth().height(380.dp)) {
-            // User List Sidebar
             LazyColumn(modifier = Modifier.weight(1f).fillMaxHeight().border(1.dp, Color(0xFF262B3D))) {
                 items(chats.keys.toList()) { phone ->
                     val unread = chats[phone]?.count { it.sender == "user" && !it.seen } ?: 0
@@ -1475,7 +1527,6 @@ fun SupportChatModal(
 
             Spacer(modifier = Modifier.width(6.dp))
 
-            // Chat Messages Thread
             selectedUserPhone?.let { phone ->
                 val msgList = chats[phone] ?: emptyList()
                 Column(modifier = Modifier.weight(2f).fillMaxHeight()) {
@@ -1534,7 +1585,9 @@ fun SupportChatModal(
     }
 }
 
+// -------------------------------------------------------------
 // ১০. Balance Reset Controller Modal
+// -------------------------------------------------------------
 @Composable
 fun BalanceResetModal(
     allUsers: Map<String, UserProfile>,
@@ -1597,7 +1650,9 @@ fun BalanceResetModal(
     }
 }
 
+// -------------------------------------------------------------
 // ১১. System Settings & Gateways Modal
+// -------------------------------------------------------------
 @Composable
 fun SystemSettingsModal(
     db: FirebaseDatabase,
@@ -1651,36 +1706,6 @@ fun SystemSettingsModal(
                 colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
             ) {
                 Text("Save Settings", color = Color.Black, fontWeight = FontWeight.Bold)
-            }
-        }
-    }
-}
-
-// বেস ডায়ালগ কনটেইনার
-@Composable
-fun BaseCockpitDialog(
-    title: String,
-    onDismiss: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .shadow(24.dp, RoundedCornerShape(20.dp))
-                .background(Brush.verticalGradient(listOf(Color(0xFF161826), Color(0xFF090A0F))), RoundedCornerShape(20.dp))
-                .border(1.4.dp, GoldMetallicMain.copy(0.4f), RoundedCornerShape(20.dp))
-                .padding(14.dp)
-        ) {
-            Column {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = TextDimGray, modifier = Modifier.size(18.dp))
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                content()
             }
         }
     }
