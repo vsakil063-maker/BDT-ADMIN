@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
@@ -60,7 +61,7 @@ val TextDimGray = Color(0xFF8A92A6)
 val TextPureWhite = Color(0xFFFFFFFF)
 
 // ==========================================
-// 🌐 ফায়ারবেস ডেটা মডেল
+// 🌐 ডেটা মডেল
 // ==========================================
 data class UserProfile(
     val phone: String = "",
@@ -69,7 +70,8 @@ data class UserProfile(
     val password: String = "",
     val otp_code: String = "",
     val balance: Double = 0.0,
-    val active: Boolean = false,
+    val active: Boolean = true,
+    val blocked: Boolean = false,
     val referred_by: String = "",
     val registration_date: String = "",
     val wallet: UserWallet? = null,
@@ -77,6 +79,8 @@ data class UserProfile(
     val withdrawals: Map<String, TransactionItem>? = null,
     val recharges: Map<String, RechargeItem>? = null,
     val paragraph_jobs: Map<String, TaskItem>? = null,
+    val sendmoney: Map<String, SendMoneyRecord>? = null,
+    val commission: Double = 0.0,
     val verification_fee_paid: Boolean = false
 )
 
@@ -120,6 +124,18 @@ data class TaskItem(
     val admin_comment: String = ""
 )
 
+data class SendMoneyRecord(
+    val id: String = "",
+    val type: String = "Sent",
+    val sender: String = "",
+    val senderName: String = "",
+    val target: String = "",
+    val targetName: String = "",
+    val amount: Double = 0.0,
+    val date: String = "",
+    val status: String = "Pending"
+)
+
 data class SendMoneyRequest(
     val id: String = "",
     val sender: String = "",
@@ -139,7 +155,9 @@ data class GiftVoucher(
     val referredUid: String = "",
     val amount: Double = 0.0,
     val date: String = "",
-    val status: String = "active"
+    val status: String = "active",
+    val claimedBy: String = "",
+    val claimedDate: String = ""
 )
 
 data class ChatMessage(
@@ -150,14 +168,18 @@ data class ChatMessage(
     val seen: Boolean = false
 )
 
-// ==========================================
-// 📱 মেইন ড্যাশবোর্ড স্ক্রিন
-// ==========================================
+data class ConfirmDialogState(
+    val title: String,
+    val message: String,
+    val onConfirm: () -> Unit
+)
+
 @Composable
 fun CockpitDashboardScreen() {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
 
-    // ✅ ক্র্যাশ ফিক্স: ফায়ারবেস অটো-ইনিশিয়ালাইজেশন
+    // Firebase Initialization with Safety Catch
     val db = remember {
         try {
             if (FirebaseApp.getApps(context).isEmpty()) {
@@ -177,7 +199,7 @@ fun CockpitDashboardScreen() {
         }
     }
 
-    // State Variables
+    var selectedBottomNav by remember { mutableIntStateOf(0) }
     var usersMap by remember { mutableStateOf<Map<String, UserProfile>>(emptyMap()) }
     var sendMoneyList by remember { mutableStateOf<List<SendMoneyRequest>>(emptyList()) }
     var giftVouchersList by remember { mutableStateOf<List<GiftVoucher>>(emptyList()) }
@@ -185,8 +207,14 @@ fun CockpitDashboardScreen() {
     var activeModalId by remember { mutableStateOf<String?>(null) }
     var inspectingPhone by remember { mutableStateOf<String?>(null) }
     var inspectingTaskText by remember { mutableStateOf<String?>(null) }
+    var confirmDialog by remember { mutableStateOf<ConfirmDialogState?>(null) }
 
-    // Realtime Listeners
+    fun copyWithToast(text: String, label: String) {
+        clipboard.setText(AnnotatedString(text))
+        Toast.makeText(context, "$label কপি করা হয়েছে!", Toast.LENGTH_SHORT).show()
+    }
+
+    // Live Realtime Listeners
     DisposableEffect(Unit) {
         val usersRef = db.getReference("users")
         val sendMoneyRef = db.getReference("pending_send_money")
@@ -203,14 +231,13 @@ fun CockpitDashboardScreen() {
                     val password = child.child("password").getValue(String::class.java) ?: ""
                     val otp = child.child("otp_code").getValue(String::class.java) ?: ""
                     val balance = child.child("balance").getValue(Double::class.java)
-                        ?: child.child("balance").getValue(Long::class.java)?.toDouble()
-                        ?: 0.0
-                    val active = child.child("active").getValue(Boolean::class.java)
-                        ?: (child.child("active").getValue(String::class.java) == "true")
+                        ?: child.child("balance").getValue(Long::class.java)?.toDouble() ?: 0.0
+                    val blocked = child.child("blocked").getValue(Boolean::class.java) ?: false
+                    val active = child.child("active").getValue(Boolean::class.java) ?: !blocked
                     val refBy = child.child("referred_by").getValue(Any::class.java)?.toString() ?: ""
                     val regDate = child.child("registration_date").getValue(String::class.java)
-                        ?: child.child("date").getValue(String::class.java)
-                        ?: ""
+                        ?: child.child("date").getValue(String::class.java) ?: ""
+                    val comm = child.child("commission").getValue(Double::class.java) ?: 0.0
 
                     val wSnap = child.child("wallet")
                     val wallet = if (wSnap.exists()) {
@@ -224,10 +251,9 @@ fun CockpitDashboardScreen() {
                     val depMap = mutableMapOf<String, TransactionItem>()
                     for (d in child.child("deposits").children) {
                         val dId = d.key ?: ""
-                        val amt = d.child("amount").getValue(Double::class.java) ?: d.child("amount").getValue(Long::class.java)?.toDouble() ?: 0.0
                         depMap[dId] = TransactionItem(
                             id = dId,
-                            amount = amt,
+                            amount = d.child("amount").getValue(Double::class.java) ?: 0.0,
                             wallet = d.child("wallet").getValue(String::class.java) ?: "",
                             sender = d.child("sender").getValue(String::class.java) ?: "",
                             txid = d.child("txid").getValue(String::class.java) ?: "",
@@ -239,25 +265,21 @@ fun CockpitDashboardScreen() {
                     val wdMap = mutableMapOf<String, TransactionItem>()
                     for (w in child.child("withdrawals").children) {
                         val wId = w.key ?: ""
-                        val amt = w.child("amount").getValue(Double::class.java) ?: w.child("amount").getValue(Long::class.java)?.toDouble() ?: 0.0
-                        val totDed = w.child("totalDeducted").getValue(Double::class.java) ?: amt
+                        val amt = w.child("amount").getValue(Double::class.java) ?: 0.0
                         wdMap[wId] = TransactionItem(
-                            id = wId,
-                            amount = amt,
+                            id = wId, amount = amt,
                             wallet = w.child("wallet").getValue(String::class.java) ?: "",
                             date = w.child("date").getValue(String::class.java) ?: "",
                             status = w.child("status").getValue(String::class.java) ?: "Pending",
-                            totalDeducted = totDed
+                            totalDeducted = w.child("totalDeducted").getValue(Double::class.java) ?: amt
                         )
                     }
 
                     val rcMap = mutableMapOf<String, RechargeItem>()
                     for (r in child.child("recharges").children) {
                         val rId = r.key ?: ""
-                        val amt = r.child("amount").getValue(Double::class.java) ?: r.child("amount").getValue(Long::class.java)?.toDouble() ?: 0.0
                         rcMap[rId] = RechargeItem(
-                            id = rId,
-                            amount = amt,
+                            id = rId, amount = r.child("amount").getValue(Double::class.java) ?: 0.0,
                             operator = r.child("operator").getValue(String::class.java) ?: "",
                             type = r.child("type").getValue(String::class.java) ?: "",
                             number = r.child("number").getValue(String::class.java) ?: "",
@@ -269,27 +291,42 @@ fun CockpitDashboardScreen() {
                     val ptMap = mutableMapOf<String, TaskItem>()
                     for (p in child.child("paragraph_jobs").children) {
                         val pId = p.key ?: ""
-                        val amt = p.child("amount").getValue(Double::class.java) ?: p.child("amount").getValue(Long::class.java)?.toDouble() ?: 0.0
-                        val fee = p.child("entry_fee").getValue(Double::class.java) ?: 0.0
                         ptMap[pId] = TaskItem(
                             id = pId,
                             type = p.child("type").getValue(String::class.java) ?: "Task",
                             lang = p.child("lang").getValue(String::class.java) ?: "General",
                             topic = p.child("topic").getValue(String::class.java) ?: "",
                             text = p.child("text").getValue(String::class.java) ?: "",
-                            amount = amt,
-                            entry_fee = fee,
+                            amount = p.child("amount").getValue(Double::class.java) ?: 0.0,
+                            entry_fee = p.child("entry_fee").getValue(Double::class.java) ?: 0.0,
                             date = p.child("date").getValue(String::class.java) ?: "",
                             status = p.child("status").getValue(String::class.java) ?: "Pending",
                             admin_comment = p.child("admin_comment").getValue(String::class.java) ?: ""
                         )
                     }
 
+                    val smMap = mutableMapOf<String, SendMoneyRecord>()
+                    for (s in child.child("sendmoney").children) {
+                        val sId = s.key ?: ""
+                        smMap[sId] = SendMoneyRecord(
+                            id = sId,
+                            type = s.child("type").getValue(String::class.java) ?: "Received",
+                            sender = s.child("sender").getValue(String::class.java) ?: "",
+                            senderName = s.child("senderName").getValue(String::class.java) ?: "",
+                            target = s.child("target").getValue(String::class.java) ?: "",
+                            targetName = s.child("targetName").getValue(String::class.java) ?: "",
+                            amount = s.child("amount").getValue(Double::class.java) ?: 0.0,
+                            date = s.child("date").getValue(String::class.java) ?: "",
+                            status = s.child("status").getValue(String::class.java) ?: "Success"
+                        )
+                    }
+
                     map[phone] = UserProfile(
                         phone = phone, name = name, uid = uid, password = password,
-                        otp_code = otp, balance = balance, active = active,
+                        otp_code = otp, balance = balance, active = active, blocked = blocked,
                         referred_by = refBy, registration_date = regDate, wallet = wallet,
-                        deposits = depMap, withdrawals = wdMap, recharges = rcMap, paragraph_jobs = ptMap
+                        deposits = depMap, withdrawals = wdMap, recharges = rcMap, paragraph_jobs = ptMap,
+                        sendmoney = smMap, commission = comm
                     )
                 }
                 usersMap = map
@@ -302,10 +339,9 @@ fun CockpitDashboardScreen() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val list = mutableListOf<SendMoneyRequest>()
                 for (child in snapshot.children) {
-                    val id = child.key ?: ""
                     list.add(
                         SendMoneyRequest(
-                            id = id,
+                            id = child.key ?: "",
                             sender = child.child("sender").getValue(String::class.java) ?: "",
                             senderName = child.child("senderName").getValue(String::class.java) ?: "",
                             target = child.child("target").getValue(String::class.java) ?: "",
@@ -328,15 +364,16 @@ fun CockpitDashboardScreen() {
             override fun onDataChange(snapshot: DataSnapshot) {
                 val list = mutableListOf<GiftVoucher>()
                 for (child in snapshot.children) {
-                    val code = child.key ?: ""
                     list.add(
                         GiftVoucher(
-                            code = code,
-                            targetUid = child.child("targetUid").getValue(String::class.java) ?: child.child("uid").getValue(String::class.java) ?: "",
+                            code = child.key ?: "",
+                            targetUid = child.child("targetUid").getValue(String::class.java) ?: "",
                             referredUid = child.child("referredUid").getValue(String::class.java) ?: "",
                             amount = child.child("amount").getValue(Double::class.java) ?: 0.0,
                             date = child.child("date").getValue(String::class.java) ?: "",
-                            status = child.child("status").getValue(String::class.java) ?: "active"
+                            status = child.child("status").getValue(String::class.java) ?: "active",
+                            claimedBy = child.child("claimedBy").getValue(String::class.java) ?: "",
+                            claimedDate = child.child("claimedDate").getValue(String::class.java) ?: ""
                         )
                     )
                 }
@@ -381,13 +418,16 @@ fun CockpitDashboardScreen() {
 
     val todayDateStr = remember { SimpleDateFormat("d/M/yyyy", Locale.getDefault()).format(Date()) }
     
-    val totalUsers = usersMap.size
+    val totalUsersCount = usersMap.size
+    val activeUsersCount = usersMap.values.count { !it.blocked && it.active }
     var totalDeposit = 0.0
     var todayDeposit = 0.0
     var totalWithdraw = 0.0
     var todayWithdraw = 0.0
     var totalWorkDone = 0.0
+    var completedTasksCount = 0
     var totalUserProfits = 0.0
+    var todayUserProfits = 0.0
     var totalVolume = 0.0
 
     var pendingDepositsCount = 0
@@ -417,8 +457,10 @@ fun CockpitDashboardScreen() {
         u.paragraph_jobs?.values?.forEach { p ->
             if (p.status == "Pending") pendingTypingCount++
             if (p.status == "Success") {
+                completedTasksCount++
                 totalUserProfits += p.amount
-                if (p.date.contains(todayDateStr)) totalWorkDone += p.amount
+                totalWorkDone += p.amount
+                if (p.date.contains(todayDateStr)) todayUserProfits += p.amount
             }
         }
     }
@@ -429,8 +471,16 @@ fun CockpitDashboardScreen() {
         unreadChatsCount += mList.count { it.sender == "user" && !it.seen }
     }
 
+    val totalPendingNotifications = pendingDepositsCount + pendingWithdrawalsCount +
+            pendingSendMoneyCount + pendingRechargesCount + pendingTypingCount + unreadChatsCount
+
     Scaffold(
-        bottomBar = { CockpitLuxuryBottomNav() },
+        bottomBar = {
+            CockpitLuxuryBottomNav(
+                selected = selectedBottomNav,
+                onSelect = { selectedBottomNav = it }
+            )
+        },
         containerColor = DarkCanvasBg
     ) { innerPadding ->
         Column(
@@ -442,60 +492,120 @@ fun CockpitDashboardScreen() {
                         colors = listOf(Color(0xFF131522), DarkCanvasBg, Color(0xFF030406))
                     )
                 )
-                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            HeaderBarCompact()
+            // ১. টপ হেডার
+            HeaderBarCompact(totalNotifications = totalPendingNotifications)
             Spacer(modifier = Modifier.height(10.dp))
-            WelcomeCardCompact()
-            Spacer(modifier = Modifier.height(14.dp))
 
-            // ওভারভিউ স্ট্যাটিস্টিক্স গ্রিড
-            OverviewStatsGridLive(
-                totalUsers = totalUsers,
-                totalDeposit = totalDeposit,
-                todayDeposit = todayDeposit,
-                totalWithdraw = totalWithdraw,
-                todayWithdraw = todayWithdraw,
-                totalWorkDone = totalWorkDone,
-                totalUserProfits = totalUserProfits,
-                totalVolume = totalVolume,
-                onCardClick = { modalId -> activeModalId = modalId }
-            )
+            // ট্যাবের কনটেন্ট
+            when (selectedBottomNav) {
+                0 -> { // HOME (ড্যাশবোর্ড)
+                    Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        WelcomeCardCompact()
+                        Spacer(modifier = Modifier.height(14.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                        // টপ স্ট্যাটাস কার্ড (ক্লিক বন্ধ)
+                        OverviewStatsNonClickable(
+                            totalUsers = totalUsersCount,
+                            activeUsers = activeUsersCount,
+                            totalDeposit = totalDeposit,
+                            todayDeposit = todayDeposit,
+                            totalWithdraw = totalWithdraw,
+                            todayWithdraw = todayWithdraw,
+                            totalWorkDone = totalWorkDone,
+                            completedTasks = completedTasksCount,
+                            totalUserProfits = totalUserProfits,
+                            todayUserProfits = todayUserProfits,
+                            totalVolume = totalVolume
+                        )
 
-            // কমান্ড ডেক
-            WorkspaceDeckLive(
-                pendingDeposits = pendingDepositsCount,
-                pendingWithdrawals = pendingWithdrawalsCount,
-                pendingSendMoney = pendingSendMoneyCount,
-                pendingRecharges = pendingRechargesCount,
-                validVouchers = giftVouchersList.size,
-                pendingTyping = pendingTypingCount,
-                unreadChats = unreadChatsCount,
-                onCardClick = { modalId -> activeModalId = modalId }
-            )
+                        Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+                        // কমান্ড ডেক
+                        WorkspaceDeckLive(
+                            pendingDeposits = pendingDepositsCount,
+                            pendingWithdrawals = pendingWithdrawalsCount,
+                            pendingSendMoney = pendingSendMoneyCount,
+                            pendingRecharges = pendingRechargesCount,
+                            validVouchers = giftVouchersList.count { it.status == "active" },
+                            pendingTyping = pendingTypingCount,
+                            unreadChats = unreadChatsCount,
+                            onCardClick = { modalId -> activeModalId = modalId }
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+                }
+                1 -> { // USERS (গত ৭ দিনের একটিভ ওয়ার্কার্স)
+                    ActiveWorkers7DaysTab(
+                        usersMap = usersMap,
+                        onInspect = { phone -> inspectingPhone = phone; activeModalId = "inspect" }
+                    )
+                }
+                2 -> { // REPORTS (গত ৭ দিনের রিপোর্টস)
+                    WorkReports7DaysTab(usersMap = usersMap)
+                }
+                3 -> { // COMMISSIONS (কমিশন ক্লেইম ম্যানেজার)
+                    CommissionsManagerTab(
+                        usersMap = usersMap,
+                        onDeductCommission = { phone, amount ->
+                            confirmDialog = ConfirmDialogState(
+                                title = "Deduct Commission",
+                                message = "আপনি কি $phone এর অ্যাকাউন্ট থেকে ৳$amount কমিশন কেটে নিতে চান?",
+                                onConfirm = {
+                                    db.getReference("users/$phone/commission").setValue(0.0)
+                                    Toast.makeText(context, "৳$amount কমিশন সফলভাবে কাটা হয়েছে!", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    )
+                }
+            }
         }
 
         // ==========================================
-        // ১০টি ইন্টারেক্টিভ মডাল সিস্টেম
+        // পপআপ মডালসমূহ
         // ==========================================
         when (activeModalId) {
             "directory" -> UserDirectoryModal(
                 users = usersMap.values.toList(),
                 onDismiss = { activeModalId = null },
                 onInspect = { phone -> inspectingPhone = phone; activeModalId = "inspect" },
-                onToggleActive = { phone, active -> db.getReference("users/$phone/active").setValue(active) },
+                onToggleBlock = { phone, shouldBlock ->
+                    confirmDialog = ConfirmDialogState(
+                        title = if (shouldBlock) "Block User" else "Unblock User",
+                        message = "আপনি কি $phone অ্যাকাউন্টটি ${if (shouldBlock) "ব্লক" else "আনব্লক"} করতে চান?",
+                        onConfirm = {
+                            db.getReference("users/$phone/blocked").setValue(shouldBlock)
+                            db.getReference("users/$phone/active").setValue(!shouldBlock)
+                            Toast.makeText(context, "ইউজার ${if (shouldBlock) "ব্লক" else "আনব্লক"} করা হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
                 onModifyBalance = { phone, add, amt ->
                     val curr = usersMap[phone]?.balance ?: 0.0
                     val newBal = if (add) curr + amt else maxOf(0.0, curr - amt)
-                    db.getReference("users/$phone/balance").setValue(newBal)
+                    confirmDialog = ConfirmDialogState(
+                        title = "Update Balance",
+                        message = "$phone এর অ্যাকাউন্টে ৳$amt ${if (add) "যোগ" else "বিয়োগ"} করবেন?",
+                        onConfirm = {
+                            db.getReference("users/$phone/balance").setValue(newBal)
+                            Toast.makeText(context, "ব্যালেন্স আপডেট সফল!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 },
-                onResetBalance = { phone -> db.getReference("users/$phone/balance").setValue(0.0) },
-                onDelete = { phone -> db.getReference("users/$phone").removeValue() }
+                onDelete = { phone ->
+                    confirmDialog = ConfirmDialogState(
+                        title = "Delete Account",
+                        message = "⚠️ সতর্কতা: $phone প্রোফাইলটি স্থায়ীভাবে মুছে ফেলতে চান?",
+                        onConfirm = {
+                            db.getReference("users/$phone").removeValue()
+                            Toast.makeText(context, "অ্যাকাউন্ট ডিলিট করা হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
+                onCopy = ::copyWithToast
             )
 
             "inspect" -> inspectingPhone?.let { phone ->
@@ -503,7 +613,8 @@ fun CockpitDashboardScreen() {
                     InspectUserModal(
                         user = user,
                         allUsers = usersMap,
-                        onDismiss = { activeModalId = "directory"; inspectingPhone = null }
+                        onDismiss = { activeModalId = "directory"; inspectingPhone = null },
+                        onCopy = ::copyWithToast
                     )
                 }
             }
@@ -512,12 +623,27 @@ fun CockpitDashboardScreen() {
                 users = usersMap,
                 onDismiss = { activeModalId = null },
                 onApprove = { phone, id, amount ->
-                    db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + amount)
-                    db.getReference("users/$phone/deposits/$id/status").setValue("Success")
+                    confirmDialog = ConfirmDialogState(
+                        title = "Approve Deposit",
+                        message = "৳$amount ডিপোজিট অনুমোদন করবেন?",
+                        onConfirm = {
+                            db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + amount)
+                            db.getReference("users/$phone/deposits/$id/status").setValue("Success")
+                            Toast.makeText(context, "ডিপোজিট অ্যাপ্রুভ হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 },
                 onReject = { phone, id ->
-                    db.getReference("users/$phone/deposits/$id/status").setValue("Rejected")
-                }
+                    confirmDialog = ConfirmDialogState(
+                        title = "Reject Deposit",
+                        message = "ডিপোজিট রিকোয়েস্ট রিজেক্ট করবেন?",
+                        onConfirm = {
+                            db.getReference("users/$phone/deposits/$id/status").setValue("Rejected")
+                            Toast.makeText(context, "ডিপোজিট রিজেক্ট করা হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
+                onCopy = ::copyWithToast
             )
 
             "withdrawals" -> WithdrawalsManagerModal(
@@ -525,40 +651,86 @@ fun CockpitDashboardScreen() {
                 onDismiss = { activeModalId = null },
                 onInspect = { phone -> inspectingPhone = phone; activeModalId = "inspect" },
                 onApprove = { phone, id ->
-                    db.getReference("users/$phone/withdrawals/$id/status").setValue("Success")
+                    confirmDialog = ConfirmDialogState(
+                        title = "Approve Cash Out",
+                        message = "উইথড্র রিকোয়েস্ট অনুমোদন করবেন?",
+                        onConfirm = {
+                            db.getReference("users/$phone/withdrawals/$id/status").setValue("Success")
+                            Toast.makeText(context, "উইথড্র সফল হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 },
                 onReject = { phone, id, refundAmount ->
-                    db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + refundAmount)
-                    db.getReference("users/$phone/withdrawals/$id/status").setValue("Rejected")
-                }
+                    confirmDialog = ConfirmDialogState(
+                        title = "Reject Cash Out",
+                        message = "উইথড্র রিজেক্ট করে ৳$refundAmount ইউজারকে রিফান্ড করবেন?",
+                        onConfirm = {
+                            db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + refundAmount)
+                            db.getReference("users/$phone/withdrawals/$id/status").setValue("Rejected")
+                            Toast.makeText(context, "উইথড্র রিজেক্ট ও টাকা রিফান্ড হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
+                onCopy = ::copyWithToast
             )
 
             "sendmoney" -> SendMoneyManagerModal(
                 requests = sendMoneyList,
-                users = usersMap,
                 onDismiss = { activeModalId = null },
                 onApprove = { req ->
-                    val targetBal = usersMap[req.target]?.balance ?: 0.0
-                    db.getReference("users/${req.target}/balance").setValue(targetBal + req.amount)
-                    db.getReference("pending_send_money/${req.id}/status").setValue("Success")
-                    db.getReference("users/${req.sender}/sendmoney/${req.id}/status").setValue("Success")
+                    confirmDialog = ConfirmDialogState(
+                        title = "Approve Send Money",
+                        message = "${req.sender} থেকে ${req.target} এ ৳${req.amount} ট্রান্সফার অনুমোদন করবেন?",
+                        onConfirm = {
+                            val targetBal = usersMap[req.target]?.balance ?: 0.0
+                            db.getReference("users/${req.target}/balance").setValue(targetBal + req.amount)
+                            db.getReference("pending_send_money/${req.id}/status").setValue("Success")
+                            db.getReference("users/${req.sender}/sendmoney/${req.id}/status").setValue("Success")
+                            Toast.makeText(context, "সেন্ড মানি ট্রান্সফার সম্পন্ন!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 },
                 onReject = { req ->
-                    val senderBal = usersMap[req.sender]?.balance ?: 0.0
-                    db.getReference("users/${req.sender}/balance").setValue(senderBal + req.totalDeducted)
-                    db.getReference("pending_send_money/${req.id}/status").setValue("Rejected")
-                    db.getReference("users/${req.sender}/sendmoney/${req.id}/status").setValue("Rejected")
-                }
+                    confirmDialog = ConfirmDialogState(
+                        title = "Reject Send Money",
+                        message = "সেন্ড মানি রিজেক্ট করে ৳${req.totalDeducted} প্রেরককে ফেরত দেবেন?",
+                        onConfirm = {
+                            val senderBal = usersMap[req.sender]?.balance ?: 0.0
+                            db.getReference("users/${req.sender}/balance").setValue(senderBal + req.totalDeducted)
+                            db.getReference("pending_send_money/${req.id}/status").setValue("Rejected")
+                            db.getReference("users/${req.sender}/sendmoney/${req.id}/status").setValue("Rejected")
+                            Toast.makeText(context, "সেন্ড মানি রিজেক্ট ও রিফান্ড হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
+                onCopy = ::copyWithToast
             )
 
             "recharges" -> RechargesManagerModal(
                 users = usersMap,
                 onDismiss = { activeModalId = null },
-                onApprove = { phone, id -> db.getReference("users/$phone/recharges/$id/status").setValue("Success") },
+                onApprove = { phone, id ->
+                    confirmDialog = ConfirmDialogState(
+                        title = "Approve Recharge",
+                        message = "মোবাইল রিচার্জ অনুমোদন করবেন?",
+                        onConfirm = {
+                            db.getReference("users/$phone/recharges/$id/status").setValue("Success")
+                            Toast.makeText(context, "রিচার্জ সফল!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
                 onReject = { phone, id, amount ->
-                    db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + amount)
-                    db.getReference("users/$phone/recharges/$id/status").setValue("Rejected")
-                }
+                    confirmDialog = ConfirmDialogState(
+                        title = "Reject Recharge",
+                        message = "রিচার্জ বাতিল করে ৳$amount ইউজারকে ফেরত দেবেন?",
+                        onConfirm = {
+                            db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + amount)
+                            db.getReference("users/$phone/recharges/$id/status").setValue("Rejected")
+                            Toast.makeText(context, "রিচার্জ বাতিল ও রিফান্ড হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
+                onCopy = ::copyWithToast
             )
 
             "vouchers" -> GiftVouchersModal(
@@ -576,7 +748,9 @@ fun CockpitDashboardScreen() {
                         status = "active"
                     )
                     db.getReference("valid_gift_vouchers/$code").setValue(vData)
-                }
+                    Toast.makeText(context, "২১-ডিজিটের কোড তৈরি ও ডাটাবেজে লক হয়েছে!", Toast.LENGTH_SHORT).show()
+                },
+                onCopy = ::copyWithToast
             )
 
             "typing" -> TypingTasksModal(
@@ -584,32 +758,47 @@ fun CockpitDashboardScreen() {
                 onDismiss = { activeModalId = null },
                 onReadWork = { text -> inspectingTaskText = text },
                 onApprove = { phone, id, reward, entryFee ->
-                    val currBal = usersMap[phone]?.balance ?: 0.0
-                    db.getReference("users/$phone/balance").setValue(currBal + reward)
-                    db.getReference("users/$phone/paragraph_jobs/$id/status").setValue("Success")
+                    confirmDialog = ConfirmDialogState(
+                        title = "Approve Task",
+                        message = "কাজটি অনুমোদন করে ইউজারকে ৳$reward রিওয়ার্ড দেবেন?",
+                        onConfirm = {
+                            val currBal = usersMap[phone]?.balance ?: 0.0
+                            db.getReference("users/$phone/balance").setValue(currBal + reward)
+                            db.getReference("users/$phone/paragraph_jobs/$id/status").setValue("Success")
 
-                    val user = usersMap[phone]
-                    if (user != null && user.referred_by.isNotEmpty()) {
-                        val netProfit = maxOf(0.0, reward - entryFee)
-                        val comm = netProfit * 0.05
-                        usersMap.values.find { it.uid == user.referred_by }?.let { referrer ->
-                            val refPath = db.getReference("users/${referrer.phone}/referrals/$phone")
-                            refPath.child("commission").setValue(ServerValue.increment(comm))
-                            refPath.child("claimed").setValue(false)
+                            val user = usersMap[phone]
+                            if (user != null && user.referred_by.isNotEmpty()) {
+                                val netProfit = maxOf(0.0, reward - entryFee)
+                                val comm = netProfit * 0.05
+                                usersMap.values.find { it.uid == user.referred_by }?.let { referrer ->
+                                    val refPath = db.getReference("users/${referrer.phone}/referrals/$phone")
+                                    refPath.child("commission").setValue(ServerValue.increment(comm))
+                                    refPath.child("claimed").setValue(false)
+                                }
+                            }
+                            Toast.makeText(context, "টাস্ক অ্যাপ্রুভ হয়েছে!", Toast.LENGTH_SHORT).show()
                         }
-                    }
+                    )
                 },
                 onReject = { phone, id, entryFee, reason ->
-                    if (entryFee > 0) {
-                        db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + entryFee)
-                    }
-                    db.getReference("users/$phone/paragraph_jobs/$id/status").setValue("Rejected")
-                    db.getReference("users/$phone/paragraph_jobs/$id/admin_comment").setValue(reason)
+                    confirmDialog = ConfirmDialogState(
+                        title = "Reject Task",
+                        message = "কাজটি রিজেক্ট করবেন?",
+                        onConfirm = {
+                            if (entryFee > 0) {
+                                db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + entryFee)
+                            }
+                            db.getReference("users/$phone/paragraph_jobs/$id/status").setValue("Rejected")
+                            db.getReference("users/$phone/paragraph_jobs/$id/admin_comment").setValue(reason)
+                            Toast.makeText(context, "টাস্ক রিজেক্ট করা হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 }
             )
 
-            "chat" -> SupportChatModal(
+            "chat" -> WhatsAppStyleSupportChatModal(
                 chats = chatsMap,
+                allUsers = usersMap,
                 onDismiss = { activeModalId = null },
                 onSendReply = { phone, text ->
                     val msgMap = mapOf(
@@ -618,17 +807,42 @@ fun CockpitDashboardScreen() {
                     db.getReference("chats/$phone/messages").push().setValue(msgMap)
                 },
                 onMarkSeen = { phone, msgId -> db.getReference("chats/$phone/messages/$msgId/seen").setValue(true) },
-                onClearChat = { phone -> db.getReference("chats/$phone").removeValue() }
+                onClearChat = { phone ->
+                    confirmDialog = ConfirmDialogState(
+                        title = "Clear Chat",
+                        message = "$phone এর সাথে সম্পূর্ণ চ্যাট মুছে ফেলতে চান?",
+                        onConfirm = {
+                            db.getReference("chats/$phone").removeValue()
+                            Toast.makeText(context, "চ্যাট মুছে ফেলা হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
             )
 
             "reset_balance" -> BalanceResetModal(
                 allUsers = usersMap,
                 onDismiss = { activeModalId = null },
-                onResetSingle = { phone -> db.getReference("users/$phone/balance").setValue(0.0) },
+                onResetSingle = { phone ->
+                    confirmDialog = ConfirmDialogState(
+                        title = "Single Balance Reset",
+                        message = "$phone এর ব্যালেন্স ৳০.০০ করবেন?",
+                        onConfirm = {
+                            db.getReference("users/$phone/balance").setValue(0.0)
+                            Toast.makeText(context, "ব্যালেন্স ৳০.০০ করা হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                },
                 onResetAll = {
-                    val updates = mutableMapOf<String, Any>()
-                    usersMap.keys.forEach { p -> updates["users/$p/balance"] = 0.0 }
-                    db.reference.updateChildren(updates)
+                    confirmDialog = ConfirmDialogState(
+                        title = "⚠️ BULK RESET ALL USERS",
+                        message = "চরম সতর্কতা: সকল ${usersMap.size} জন ইউজারের ব্যালেন্স একসাথে ৳০.০০ করবেন?",
+                        onConfirm = {
+                            val updates = mutableMapOf<String, Any>()
+                            usersMap.keys.forEach { p -> updates["users/$p/balance"] = 0.0 }
+                            db.reference.updateChildren(updates)
+                            Toast.makeText(context, "সকলের ব্যালেন্স ৳০.০০ রিসেট হয়েছে!", Toast.LENGTH_LONG).show()
+                        }
+                    )
                 }
             )
 
@@ -638,6 +852,37 @@ fun CockpitDashboardScreen() {
             )
         }
 
+        // কনফার্মেশন ডায়ালগ
+        confirmDialog?.let { dialog ->
+            AlertDialog(
+                onDismissRequest = { confirmDialog = null },
+                title = { Text(dialog.title, color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+                text = { Text(dialog.message, color = TextPureWhite, fontSize = 12.sp) },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            dialog.onConfirm()
+                            confirmDialog = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonRose)
+                    ) {
+                        Text("Yes, Proceed", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    Button(
+                        onClick = { confirmDialog = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D202D))
+                    ) {
+                        Text("Cancel", color = TextDimGray)
+                    }
+                },
+                containerColor = Color(0xFF161824),
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        // টাস্ক পড়ার ফুল ডায়ালগ
         inspectingTaskText?.let { workText ->
             AlertDialog(
                 onDismissRequest = { inspectingTaskText = null },
@@ -655,19 +900,97 @@ fun CockpitDashboardScreen() {
 }
 
 // -------------------------------------------------------------
-// লাইভ ওভারভিউ গ্রিড
+// ১. টপ হেডার (বেল আইকনে মোট নোটিফিকেশন কাউন্ট)
 // -------------------------------------------------------------
 @Composable
-fun OverviewStatsGridLive(
+fun HeaderBarCompact(totalNotifications: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(Color(0xFF1D202D), RoundedCornerShape(12.dp))
+                .border(1.2.dp, GoldMetallicMain.copy(alpha = 0.5f), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Rounded.Menu, contentDescription = "Menu", tint = GoldMetallicLight, modifier = Modifier.size(22.dp))
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .background(Color.Black, CircleShape)
+                    .border(2.dp, GoldMetallicMain, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = GoldMetallicLight, modifier = Modifier.size(12.dp))
+                    Text("RT", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text("RT GROWTH", color = GoldMetallicMain, fontWeight = FontWeight.Black, fontSize = 17.sp)
+                Text("COCKPIT", color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 12.sp, letterSpacing = 2.sp)
+                Text("MASTER COMMAND HUB", color = GoldMetallicMain.copy(alpha = 0.75f), fontSize = 7.5.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(Color(0xFF161824), CircleShape)
+                    .border(1.2.dp, GoldMetallicMain.copy(0.4f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.Notifications, contentDescription = null, tint = GoldMetallicLight, modifier = Modifier.size(20.dp))
+                if (totalNotifications > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = (-2).dp, y = 2.dp)
+                            .background(NeonRose, CircleShape)
+                            .border(1.5.dp, Color.Black, CircleShape)
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                    ) {
+                        Text("$totalNotifications", color = Color.White, fontSize = 7.5.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(Color(0xFF161824), CircleShape)
+                    .border(1.2.dp, GoldMetallicMain.copy(0.4f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Rounded.Person, contentDescription = null, tint = GoldMetallicLight, modifier = Modifier.size(20.dp))
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// ২. টপ স্ট্যাটাস কার্ডস (ক্লিক বন্ধ, পারফেক্ট সাবটাইটেল)
+// -------------------------------------------------------------
+@Composable
+fun OverviewStatsNonClickable(
     totalUsers: Int,
+    activeUsers: Int,
     totalDeposit: Double,
     todayDeposit: Double,
     totalWithdraw: Double,
     todayWithdraw: Double,
     totalWorkDone: Double,
+    completedTasks: Int,
     totalUserProfits: Double,
-    totalVolume: Double,
-    onCardClick: (String) -> Unit
+    todayUserProfits: Double,
+    totalVolume: Double
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -679,91 +1002,83 @@ fun OverviewStatsGridLive(
             Spacer(modifier = Modifier.width(5.dp))
             Text("Overview Statistics", color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 13.sp)
         }
-        Text("LIVE SYNC", color = NeonGreen, fontSize = 9.5.sp, fontWeight = FontWeight.Black)
+        Text("Oct 5, 2026 | 02:03 PM", color = TextDimGray, fontSize = 9.5.sp, fontWeight = FontWeight.Medium)
     }
 
     Spacer(modifier = Modifier.height(8.dp))
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCardLive(
+            NonClickableStatCard(
                 modifier = Modifier.weight(1f),
                 title = "Total Users",
                 value = "$totalUsers",
-                subtitle = "Active accounts",
+                subtitle = "Active accounts: $activeUsers",
                 glowColor = NeonBlue,
-                iconUrl = "https://img.icons8.com/?size=100&id=3Z9nycT6VFaI&format=png&color=000000",
-                onClick = { onCardClick("directory") }
+                iconUrl = "https://img.icons8.com/?size=100&id=3Z9nycT6VFaI&format=png&color=000000"
             )
-            StatCardLive(
+            NonClickableStatCard(
                 modifier = Modifier.weight(1f),
                 title = "Total Deposit",
                 value = "৳${String.format("%.2f", totalDeposit)}",
                 subtitle = "Today: ৳${String.format("%.2f", todayDeposit)}",
                 glowColor = NeonGreen,
-                iconUrl = "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000",
-                onClick = { onCardClick("deposits") }
+                iconUrl = "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000"
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCardLive(
+            NonClickableStatCard(
                 modifier = Modifier.weight(1f),
                 title = "Total Withdraw",
                 value = "৳${String.format("%.2f", totalWithdraw)}",
                 subtitle = "Today: ৳${String.format("%.2f", todayWithdraw)}",
                 glowColor = NeonRose,
-                iconUrl = "https://img.icons8.com/?size=100&id=nBI1rs9Fp9Lm&format=png&color=000000",
-                onClick = { onCardClick("withdrawals") }
+                iconUrl = "https://img.icons8.com/?size=100&id=nBI1rs9Fp9Lm&format=png&color=000000"
             )
-            StatCardLive(
+            NonClickableStatCard(
                 modifier = Modifier.weight(1f),
                 title = "Work Value Done",
                 value = "৳${String.format("%.2f", totalWorkDone)}",
-                subtitle = "Completed tasks",
+                subtitle = "Completed tasks: $completedTasks",
                 glowColor = NeonYellow,
-                iconUrl = "https://img.icons8.com/?size=100&id=5rjf4RBWzzU4&format=png&color=000000",
-                onClick = { onCardClick("typing") }
+                iconUrl = "https://img.icons8.com/?size=100&id=5rjf4RBWzzU4&format=png&color=000000"
             )
         }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatCardLive(
+            NonClickableStatCard(
                 modifier = Modifier.weight(1f),
                 title = "User Profits",
                 value = "৳${String.format("%.2f", totalUserProfits)}",
-                subtitle = "Total profits",
+                subtitle = "Today: ৳${String.format("%.2f", todayUserProfits)}",
                 glowColor = NeonPurple,
-                iconUrl = "https://img.icons8.com/?size=100&id=9DRY12f4liKv&format=png&color=000000",
-                onClick = { onCardClick("directory") }
+                iconUrl = "https://img.icons8.com/?size=100&id=9DRY12f4liKv&format=png&color=000000"
             )
-            StatCardLive(
+            NonClickableStatCard(
                 modifier = Modifier.weight(1f),
                 title = "Asset Volume",
                 value = "৳${String.format("%.2f", totalVolume)}",
                 subtitle = "Total assets",
                 glowColor = NeonCyan,
-                iconUrl = "https://img.icons8.com/?size=100&id=pemtUT1YiPwP&format=png&color=000000",
-                onClick = { onCardClick("reset_balance") }
+                iconUrl = "https://img.icons8.com/?size=100&id=pemtUT1YiPwP&format=png&color=000000"
             )
         }
     }
 }
 
 @Composable
-fun StatCardLive(
+fun NonClickableStatCard(
     modifier: Modifier = Modifier,
     title: String,
     value: String,
     subtitle: String,
     glowColor: Color,
-    iconUrl: String,
-    onClick: () -> Unit
+    iconUrl: String
 ) {
     Box(
         modifier = modifier
             .shadow(8.dp, RoundedCornerShape(16.dp), spotColor = glowColor)
             .background(Brush.verticalGradient(listOf(Color(0xFF151724), CardSurfaceBottom)), RoundedCornerShape(16.dp))
             .border(1.3.dp, Brush.verticalGradient(listOf(glowColor, glowColor.copy(alpha = 0.25f))), RoundedCornerShape(16.dp))
-            .clickable { onClick() }
             .padding(10.dp)
     ) {
         Column {
@@ -808,169 +1123,148 @@ fun StatCardLive(
 }
 
 // -------------------------------------------------------------
-// লাইভ কমান্ড ডেক
+// ৩. বটম নেভিগেশন ট্যাব ২: গত ৭ দিনের একটিভ ওয়ার্কার্স
 // -------------------------------------------------------------
 @Composable
-fun WorkspaceDeckLive(
-    pendingDeposits: Int,
-    pendingWithdrawals: Int,
-    pendingSendMoney: Int,
-    pendingRecharges: Int,
-    validVouchers: Int,
-    pendingTyping: Int,
-    unreadChats: Int,
-    onCardClick: (String) -> Unit
+fun ActiveWorkers7DaysTab(
+    usersMap: Map<String, UserProfile>,
+    onInspect: (String) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.GridView, contentDescription = null, tint = GoldMetallicMain, modifier = Modifier.size(16.dp))
-            Spacer(modifier = Modifier.width(5.dp))
-            Text("Command Workspace Deck", color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 12.sp)
-        }
-        Text("Manage • Monitor • Grow", color = GoldMetallicDark, fontSize = 9.sp, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold)
+    val activeWorkers = usersMap.values.filter { u ->
+        u.paragraph_jobs?.values?.any { it.status == "Success" || it.status == "Pending" } == true
     }
 
-    Spacer(modifier = Modifier.height(8.dp))
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text("Active Workers (Last 7 Days)", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+        Text("Users who submitted typing tasks recently", color = TextDimGray, fontSize = 10.sp)
+        Spacer(modifier = Modifier.height(8.dp))
 
-    val workspaceList = listOf(
-        WorkspaceActionData("User Directory", "Manage users and balances.", "https://img.icons8.com/?size=100&id=3Z9nycT6VFaI&format=png&color=000000", NeonBlue, null, "directory"),
-        WorkspaceActionData("Deposits", "Review add money requests.", "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000", NeonYellow, pendingDeposits, "deposits"),
-        WorkspaceActionData("Withdrawals", "Pending cash out requests.", "https://img.icons8.com/?size=100&id=nBI1rs9Fp9Lm&format=png&color=000000", NeonGreen, pendingWithdrawals, "withdrawals"),
-        WorkspaceActionData("Send Money Req", "Handle transfer requests.", "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000", NeonBlue, pendingSendMoney, "sendmoney"),
-        WorkspaceActionData("Recharges", "Mobile recharge operations.", "https://img.icons8.com/?size=100&id=5rjf4RBWzzU4&format=png&color=000000", NeonYellow, pendingRecharges, "recharges"),
-        WorkspaceActionData("Gift Vouchers", "Create secure 21-digit codes.", "https://img.icons8.com/?size=100&id=DA67d1tKQ9Pr&format=png&color=000000", NeonRose, validVouchers, "vouchers"),
-        WorkspaceActionData("Typing Tasks", "Review submitted typing jobs.", "https://img.icons8.com/?size=100&id=oZAinaxvg8AD&format=png&color=000000", NeonPurple, pendingTyping, "typing"),
-        WorkspaceActionData("Support Chat", "Live helpdesk control console.", "https://img.icons8.com/?size=100&id=RntMFwIniVlj&format=png&color=000000", NeonCyan, unreadChats, "chat"),
-        WorkspaceActionData("Balance Reset", "Authorized reset controller.", "https://img.icons8.com/?size=100&id=ifMVi1WVk8u2&format=png&color=000000", NeonRose, null, "reset_balance"),
-        WorkspaceActionData("System Settings", "Configure MFS & app URLs.", "https://img.icons8.com/?size=100&id=v39wEv8JU1aa&format=png&color=000000", NeonCyan, null, "settings")
-    )
+        LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(activeWorkers) { user ->
+                val taskCount = user.paragraph_jobs?.size ?: 0
+                val totalEarned = user.paragraph_jobs?.values?.filter { it.status == "Success" }?.sumOf { it.amount } ?: 0.0
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        for (i in workspaceList.indices step 2) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                WorkspaceCardItemLive(modifier = Modifier.weight(1f), data = workspaceList[i], onClick = { onCardClick(workspaceList[i].modalId) })
-                if (i + 1 < workspaceList.size) {
-                    WorkspaceCardItemLive(modifier = Modifier.weight(1f), data = workspaceList[i + 1], onClick = { onCardClick(workspaceList[i + 1].modalId) })
-                }
-            }
-        }
-    }
-}
-
-data class WorkspaceActionData(
-    val title: String,
-    val desc: String,
-    val iconUrl: String,
-    val glowColor: Color,
-    val badge: Int?,
-    val modalId: String
-)
-
-@Composable
-fun WorkspaceCardItemLive(modifier: Modifier = Modifier, data: WorkspaceActionData, onClick: () -> Unit) {
-    Box(
-        modifier = modifier
-            .shadow(5.dp, RoundedCornerShape(16.dp))
-            .background(Brush.verticalGradient(listOf(Color(0xFF151722), CardSurfaceBottom)), RoundedCornerShape(16.dp))
-            .border(1.dp, Brush.verticalGradient(listOf(GoldMetallicMain.copy(0.4f), Color(0xFF232634))), RoundedCornerShape(16.dp))
-            .clickable { onClick() }
-            .padding(10.dp)
-    ) {
-        if (data.badge != null && data.badge > 0) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .size(18.dp)
-                    .shadow(4.dp, CircleShape, spotColor = NeonRose)
-                    .background(NeonRose, CircleShape)
-                    .border(0.8.dp, Color.White.copy(0.7f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("${data.badge}", color = Color.White, fontSize = 8.5.sp, fontWeight = FontWeight.Black)
-            }
-        }
-
-        Column {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(data.glowColor.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
-                    .border(1.dp, data.glowColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                AsyncImage(model = data.iconUrl, contentDescription = data.title, modifier = Modifier.size(36.dp), contentScale = ContentScale.Fit)
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(data.title, color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(data.desc, color = TextDimGray, fontSize = 8.sp, lineHeight = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-
-            Spacer(modifier = Modifier.height(8.dp))
-            Box(
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .size(20.dp)
-                    .background(Color(0xFF1B1E2B), CircleShape)
-                    .border(0.8.dp, GoldMetallicMain.copy(0.6f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = GoldMetallicLight, modifier = Modifier.size(14.dp))
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// বেস ডায়ালগ ও মডালসমূহ
-// -------------------------------------------------------------
-@Composable
-fun BaseCockpitDialog(
-    title: String,
-    onDismiss: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .shadow(24.dp, RoundedCornerShape(20.dp))
-                .background(Brush.verticalGradient(listOf(Color(0xFF161826), Color(0xFF090A0F))), RoundedCornerShape(20.dp))
-                .border(1.4.dp, GoldMetallicMain.copy(0.4f), RoundedCornerShape(20.dp))
-                .padding(14.dp)
-        ) {
-            Column {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = TextDimGray, modifier = Modifier.size(18.dp))
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), shape = RoundedCornerShape(12.dp)) {
+                    Row(modifier = Modifier.padding(10.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                            Text(user.name.ifEmpty { "Worker" }, color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(user.phone, color = NeonGreen, fontSize = 11.sp)
+                            Text("Tasks: $taskCount | Total Earned: ৳${String.format("%.2f", totalEarned)}", color = NeonCyan, fontSize = 10.sp)
+                        }
+                        Button(
+                            onClick = { onInspect(user.phone) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D2633)),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("View Log", color = NeonCyan, fontSize = 9.sp)
+                        }
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                content()
             }
         }
     }
 }
 
 // -------------------------------------------------------------
-// ১. User Directory Modal
+// ৪. বটম নেভিগেশন ট্যাব ৩: গত ৭ দিনের রিপোর্টস
+// -------------------------------------------------------------
+@Composable
+fun WorkReports7DaysTab(usersMap: Map<String, UserProfile>) {
+    val allTasks = usersMap.flatMap { (phone, u) ->
+        u.paragraph_jobs?.values?.map { t -> Triple(u, phone, t) } ?: emptyList()
+    }.sortedByDescending { it.third.date }
+
+    val approvedCount = allTasks.count { it.third.status == "Success" }
+    val rejectedCount = allTasks.count { it.third.status == "Rejected" }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text("Work Submissions (7-Day Report)", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                Text("Approved: $approvedCount | Rejected: $rejectedCount", color = NeonGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+
+        LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(allTasks) { (user, phone, task) ->
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), shape = RoundedCornerShape(12.dp)) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("${user.name} ($phone)", color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(task.status, color = if (task.status == "Success") NeonGreen else if (task.status == "Rejected") NeonRose else NeonYellow, fontSize = 10.5.sp, fontWeight = FontWeight.Black)
+                        }
+                        Text("Topic: \"${task.topic}\" | Reward: ৳${task.amount}", color = NeonCyan, fontSize = 10.sp)
+                        Text("Date: ${task.date}", color = TextDimGray, fontSize = 9.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// ৫. বটম নেভিগেশন ট্যাব ৪: কমিশন ম্যানেজার
+// -------------------------------------------------------------
+@Composable
+fun CommissionsManagerTab(
+    usersMap: Map<String, UserProfile>,
+    onDeductCommission: (String, Double) -> Unit
+) {
+    val usersWithCommission = usersMap.values.filter { it.commission > 0.0 }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text("Referral Commission Claims", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+        Text("View and settle claimed referral commissions", color = TextDimGray, fontSize = 10.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (usersWithCommission.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No pending commissions to claim.", color = TextDimGray, fontSize = 12.sp)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(usersWithCommission) { user ->
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), shape = RoundedCornerShape(12.dp)) {
+                        Row(modifier = Modifier.padding(10.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text(user.name.ifEmpty { "User" }, color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text("Mobile: ${user.phone} | UID: ${user.uid}", color = NeonCyan, fontSize = 10.sp)
+                                Text("Claimed Commission: ৳${String.format("%.2f", user.commission)}", color = NeonGreen, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                            }
+                            Button(
+                                onClick = { onDeductCommission(user.phone, user.commission) },
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonRose),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("Deduct / Settle", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// ৬. User Directory Modal
 // -------------------------------------------------------------
 @Composable
 fun UserDirectoryModal(
     users: List<UserProfile>,
     onDismiss: () -> Unit,
     onInspect: (String) -> Unit,
-    onToggleActive: (String, Boolean) -> Unit,
+    onToggleBlock: (String, Boolean) -> Unit,
     onModifyBalance: (String, Boolean, Double) -> Unit,
-    onResetBalance: (String) -> Unit,
-    onDelete: (String) -> Unit
+    onDelete: (String) -> Unit,
+    onCopy: (String, String) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var modifyingPhone by remember { mutableStateOf<String?>(null) }
+    var modifyAmountStr by remember { mutableStateOf("") }
+    var isAdding by remember { mutableStateOf(true) }
+
     val filtered = users.filter { it.name.contains(searchQuery, true) || it.phone.contains(searchQuery) || it.uid.contains(searchQuery) }
 
     BaseCockpitDialog(title = "User Directory Accounts", onDismiss = onDismiss) {
@@ -979,7 +1273,6 @@ fun UserDirectoryModal(
             onValueChange = { searchQuery = it },
             placeholder = { Text("Search name, mobile or UID...", fontSize = 11.sp) },
             modifier = Modifier.fillMaxWidth().height(48.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White),
             singleLine = true
         )
         Spacer(modifier = Modifier.height(8.dp))
@@ -988,44 +1281,177 @@ fun UserDirectoryModal(
             items(filtered) { user ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)),
-                    border = BorderStroke(1.dp, Color(0xFF262B3D)),
+                    border = BorderStroke(1.dp, if (user.blocked) NeonRose.copy(0.6f) else Color(0xFF262B3D)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Column {
-                                Text(user.name.ifEmpty { "User" }, color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text(user.phone, color = NeonGreen, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                                Text("UID: ${user.uid} | Pass: ${user.password}", color = TextDimGray, fontSize = 10.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(user.name.ifEmpty { "User" }, color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = NeonCyan, modifier = Modifier.size(12.dp).clickable { onCopy(user.name, "নাম") })
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(user.phone, color = NeonGreen, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = NeonGreen, modifier = Modifier.size(12.dp).clickable { onCopy(user.phone, "ফোন নম্বর") })
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("UID: ${user.uid} | Pass: ${user.password}", color = TextDimGray, fontSize = 10.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = GoldMetallicLight, modifier = Modifier.size(12.dp).clickable { onCopy(user.uid, "UID") })
+                                }
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("৳${String.format("%.2f", user.balance)}", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
                                 Button(
-                                    onClick = { onToggleActive(user.phone, !user.active) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = if (user.active) Color(0xFF004D26) else Color(0xFF4D1414)),
+                                    onClick = { onToggleBlock(user.phone, !user.blocked) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (user.blocked) Color(0xFF4D1414) else Color(0xFF004D26)),
                                     modifier = Modifier.height(26.dp),
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                 ) {
-                                    Text(if (user.active) "ACTIVE ✓" else "INACTIVE", fontSize = 8.5.sp, color = if (user.active) NeonGreen else NeonRose)
+                                    Text(if (user.blocked) "BLOCKED ✕" else "ACTIVE ✓", fontSize = 8.5.sp, color = if (user.blocked) NeonRose else NeonGreen)
                                 }
                             }
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Button(onClick = { onModifyBalance(user.phone, true, 50.0) }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D3320))) {
-                                Text("+50৳", fontSize = 9.sp, color = NeonGreen)
+                            Button(onClick = { modifyingPhone = user.phone; isAdding = true }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D3320))) {
+                                Text("+ Edit", fontSize = 9.sp, color = NeonGreen)
                             }
-                            Button(onClick = { onModifyBalance(user.phone, false, 50.0) }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF33200D))) {
-                                Text("-50৳", fontSize = 9.sp, color = NeonYellow)
+                            Button(onClick = { modifyingPhone = user.phone; isAdding = false }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF33200D))) {
+                                Text("- Edit", fontSize = 9.sp, color = NeonYellow)
                             }
-                            Button(onClick = { onResetBalance(user.phone) }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF330D0D))) {
-                                Text("0৳", fontSize = 9.sp, color = NeonRose)
-                            }
-                            Button(onClick = { onInspect(user.phone) }, modifier = Modifier.weight(1.4f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D2633))) {
+                            Button(onClick = { onInspect(user.phone) }, modifier = Modifier.weight(1.2f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D2633))) {
                                 Text("Inspect", fontSize = 9.sp, color = NeonCyan)
                             }
+                            Button(onClick = { onDelete(user.phone) }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF330D0D))) {
+                                Text("Delete", fontSize = 9.sp, color = NeonRose)
+                            }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    modifyingPhone?.let { phone ->
+        AlertDialog(
+            onDismissRequest = { modifyingPhone = null },
+            title = { Text(if (isAdding) "Add Balance to $phone" else "Subtract Balance from $phone", color = GoldMetallicLight, fontSize = 14.sp, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = modifyAmountStr,
+                    onValueChange = { modifyAmountStr = it },
+                    label = { Text("টাকার পরিমাণ লিখুন (৳)") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val amt = modifyAmountStr.toDoubleOrNull() ?: 0.0
+                        if (amt > 0) {
+                            onModifyBalance(phone, isAdding, amt)
+                            modifyingPhone = null
+                            modifyAmountStr = ""
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = if (isAdding) NeonGreen else NeonYellow)
+                ) {
+                    Text(if (isAdding) "Add Money" else "Deduct Money", color = Color.Black)
+                }
+            },
+            dismissButton = {
+                Button(onClick = { modifyingPhone = null }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D202D))) {
+                    Text("Cancel", color = TextDimGray)
+                }
+            },
+            containerColor = Color(0xFF161824)
+        )
+    }
+}
+
+// -------------------------------------------------------------
+// ৭. Inspect User Modal
+// -------------------------------------------------------------
+@Composable
+fun InspectUserModal(
+    user: UserProfile,
+    allUsers: Map<String, UserProfile>,
+    onDismiss: () -> Unit,
+    onCopy: (String, String) -> Unit
+) {
+    val referrer = allUsers.values.find { it.uid == user.referred_by }
+    val myReferrals = allUsers.values.filter { it.referred_by == user.uid }
+
+    BaseCockpitDialog(title = "User Deep-Dive & All Records", onDismiss = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth().height(420.dp).verticalScroll(rememberScrollState())) {
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(user.name.ifEmpty { "User" }, color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 15.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = NeonCyan, modifier = Modifier.size(13.dp).clickable { onCopy(user.name, "নাম") })
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Phone: ${user.phone} | UID: ${user.uid}", color = NeonGreen, fontSize = 11.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = NeonGreen, modifier = Modifier.size(13.dp).clickable { onCopy(user.phone, "ফোন নম্বর") })
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = GoldMetallicLight, modifier = Modifier.size(13.dp).clickable { onCopy(user.uid, "UID") })
+                    }
+                    Text("Joined: ${user.registration_date.ifEmpty { "N/A" }}", color = TextDimGray, fontSize = 10.sp)
+                    Text("Balance: ৳${String.format("%.2f", user.balance)}", color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
+
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text("Linked Payout Wallet: ${user.wallet?.co_wallet ?: "None"}", color = TextPureWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Number: ${user.wallet?.co_number ?: "---"} (PIN: ${user.wallet?.co_pin ?: "---"})", color = TextDimGray, fontSize = 10.sp)
+                        user.wallet?.co_number?.let { num ->
+                            if (num.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = NeonCyan, modifier = Modifier.size(12.dp).clickable { onCopy(num, "ওয়ালেট নম্বর") })
+                            }
+                        }
+                    }
+                }
+            }
+
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text("Referred By: ${referrer?.name ?: "Direct"} (${referrer?.phone ?: "UID: " + user.referred_by})", color = NeonCyan, fontSize = 11.sp)
+                    Text("Total Referred Members: ${myReferrals.size} users", color = NeonPurple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text("Received Send Money History", color = GoldMetallicLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    val received = user.sendmoney?.values?.toList() ?: emptyList()
+                    if (received.isEmpty()) {
+                        Text("No send money received yet.", color = TextDimGray, fontSize = 9.5.sp)
+                    } else {
+                        received.forEach { sm ->
+                            Text("• ৳${sm.amount} from ${sm.senderName} (${sm.sender}) on ${sm.date}", color = NeonGreen, fontSize = 9.5.sp)
+                        }
+                    }
+                }
+            }
+
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text("Transaction Logs", color = GoldMetallicLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    user.deposits?.values?.takeLast(3)?.forEach { d ->
+                        Text("• Deposit: ৳${d.amount} via ${d.wallet} (${d.status}) - TxID: ${d.txid}", color = NeonCyan, fontSize = 9.5.sp)
+                    }
+                    user.withdrawals?.values?.takeLast(3)?.forEach { w ->
+                        Text("• Cash Out: ৳${w.amount} via ${w.wallet} (${w.status}) on ${w.date}", color = NeonRose, fontSize = 9.5.sp)
                     }
                 }
             }
@@ -1034,73 +1460,26 @@ fun UserDirectoryModal(
 }
 
 // -------------------------------------------------------------
-// ২. User Deep-Dive Report Modal (Inspect)
-// -------------------------------------------------------------
-@Composable
-fun InspectUserModal(
-    user: UserProfile,
-    allUsers: Map<String, UserProfile>,
-    onDismiss: () -> Unit
-) {
-    val referrer = allUsers.values.find { it.uid == user.referred_by }
-    val myReferrals = allUsers.values.filter { it.referred_by == user.uid }
-
-    BaseCockpitDialog(title = "User Deep-Dive & Analytics", onDismiss = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().height(420.dp).verticalScroll(rememberScrollState())) {
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Text(user.name.ifEmpty { "User" }, color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 16.sp)
-                    Text("Mobile: ${user.phone} | UID: ${user.uid}", color = NeonGreen, fontSize = 11.sp)
-                    Text("Joined: ${user.registration_date.ifEmpty { "N/A" }}", color = TextDimGray, fontSize = 10.sp)
-                    Text("Balance: ৳${String.format("%.2f", user.balance)}", color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
-            }
-
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Text("Referred By: ${referrer?.name ?: "Direct / None"} (${referrer?.phone ?: "UID: " + user.referred_by.ifEmpty { "N/A" }})", color = NeonCyan, fontSize = 11.sp)
-                    Text("Total My Referrals: ${myReferrals.size} members", color = NeonPurple, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                Column(modifier = Modifier.padding(10.dp)) {
-                    Text("Linked Payout Wallet: ${user.wallet?.co_wallet ?: "None"}", color = TextPureWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text("Number: ${user.wallet?.co_number ?: "---"} (PIN: ${user.wallet?.co_pin ?: "---"})", color = TextDimGray, fontSize = 10.sp)
-                }
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// ৩. Deposits Manager Modal
+// ৮. Deposits Manager Modal
 // -------------------------------------------------------------
 @Composable
 fun DepositsManagerModal(
     users: Map<String, UserProfile>,
     onDismiss: () -> Unit,
     onApprove: (String, String, Double) -> Unit,
-    onReject: (String, String) -> Unit
+    onReject: (String, String) -> Unit,
+    onCopy: (String, String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Pending") }
 
     BaseCockpitDialog(title = "Add Money Request Manager", onDismiss = onDismiss) {
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-            Button(
-                onClick = { activeTab = "Pending" },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "Pending") NeonGreen else Color(0xFF1D202D))
-            ) {
-                Text("Pending", color = if (activeTab == "Pending") Color.Black else TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Button(onClick = { activeTab = "Pending" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "Pending") NeonGreen else Color(0xFF1D202D))) {
+                Text("Pending", color = if (activeTab == "Pending") Color.Black else TextDimGray, fontSize = 11.sp)
             }
             Spacer(modifier = Modifier.width(6.dp))
-            Button(
-                onClick = { activeTab = "History" },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "History") NeonGreen else Color(0xFF1D202D))
-            ) {
-                Text("History", color = if (activeTab == "History") Color.Black else TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Button(onClick = { activeTab = "History" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "History") NeonGreen else Color(0xFF1D202D))) {
+                Text("History", color = if (activeTab == "History") Color.Black else TextDimGray, fontSize = 11.sp)
             }
         }
 
@@ -1116,8 +1495,16 @@ fun DepositsManagerModal(
                             Text("${user.name} (${user.phone})", color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             Text("৳${dep.amount}", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 13.sp)
                         }
-                        Text("Gateway: ${dep.wallet} | Sender: ${dep.sender}", color = NeonCyan, fontSize = 10.sp)
-                        Text("TxID: ${dep.txid} | Date: ${dep.date}", color = TextDimGray, fontSize = 9.5.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Gateway: ${dep.wallet} | Sender: ${dep.sender}", color = NeonCyan, fontSize = 10.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = NeonCyan, modifier = Modifier.size(11.dp).clickable { onCopy(dep.sender, "প্রেরক নম্বর") })
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("TxID: ${dep.txid}", color = TextDimGray, fontSize = 9.5.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = GoldMetallicLight, modifier = Modifier.size(11.dp).clickable { onCopy(dep.txid, "TxID") })
+                        }
 
                         if (dep.status == "Pending") {
                             Spacer(modifier = Modifier.height(6.dp))
@@ -1129,8 +1516,6 @@ fun DepositsManagerModal(
                                     Text("Reject", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
-                        } else {
-                            Text("Status: ${dep.status}", color = if (dep.status == "Success") NeonGreen else NeonRose, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                         }
                     }
                 }
@@ -1140,7 +1525,7 @@ fun DepositsManagerModal(
 }
 
 // -------------------------------------------------------------
-// ৪. Withdrawals Manager Modal
+// ৯. Withdrawals Manager Modal
 // -------------------------------------------------------------
 @Composable
 fun WithdrawalsManagerModal(
@@ -1148,26 +1533,19 @@ fun WithdrawalsManagerModal(
     onDismiss: () -> Unit,
     onInspect: (String) -> Unit,
     onApprove: (String, String) -> Unit,
-    onReject: (String, String, Double) -> Unit
+    onReject: (String, String, Double) -> Unit,
+    onCopy: (String, String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Pending") }
 
     BaseCockpitDialog(title = "Cash Out Request Manager", onDismiss = onDismiss) {
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-            Button(
-                onClick = { activeTab = "Pending" },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "Pending") NeonGreen else Color(0xFF1D202D))
-            ) {
-                Text("Pending", color = if (activeTab == "Pending") Color.Black else TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Button(onClick = { activeTab = "Pending" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "Pending") NeonGreen else Color(0xFF1D202D))) {
+                Text("Pending", color = if (activeTab == "Pending") Color.Black else TextDimGray, fontSize = 11.sp)
             }
             Spacer(modifier = Modifier.width(6.dp))
-            Button(
-                onClick = { activeTab = "History" },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "History") NeonGreen else Color(0xFF1D202D))
-            ) {
-                Text("History", color = if (activeTab == "History") Color.Black else TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            Button(onClick = { activeTab = "History" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "History") NeonGreen else Color(0xFF1D202D))) {
+                Text("History", color = if (activeTab == "History") Color.Black else TextDimGray, fontSize = 11.sp)
             }
         }
 
@@ -1183,8 +1561,17 @@ fun WithdrawalsManagerModal(
                             Text("${user.name} (${user.phone})", color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             Text("-৳${wd.amount}", color = NeonRose, fontWeight = FontWeight.Black, fontSize = 13.sp)
                         }
-                        Text("Wallet: ${wd.wallet} (${user.wallet?.co_number ?: "---"}) PIN: ${user.wallet?.co_pin ?: "---"}", color = NeonCyan, fontSize = 10.sp)
-                        Text("Date: ${wd.date}", color = TextDimGray, fontSize = 9.5.sp)
+                        
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Payout Wallet: ${wd.wallet} - Number: ${user.wallet?.co_number ?: "---"}", color = NeonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            user.wallet?.co_number?.let { num ->
+                                if (num.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = NeonCyan, modifier = Modifier.size(13.dp).clickable { onCopy(num, "উইথড্র নম্বর") })
+                                }
+                            }
+                        }
+                        Text("PIN: ${user.wallet?.co_pin ?: "---"} | Date: ${wd.date}", color = TextDimGray, fontSize = 9.5.sp)
 
                         if (wd.status == "Pending") {
                             Spacer(modifier = Modifier.height(6.dp))
@@ -1199,8 +1586,6 @@ fun WithdrawalsManagerModal(
                                     Text("Reject", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
-                        } else {
-                            Text("Status: ${wd.status}", color = if (wd.status == "Success") NeonGreen else NeonRose, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                         }
                     }
                 }
@@ -1210,15 +1595,231 @@ fun WithdrawalsManagerModal(
 }
 
 // -------------------------------------------------------------
-// ৫. Send Money Manager Modal
+// ১০. Gift Vouchers Modal
+// -------------------------------------------------------------
+@Composable
+fun GiftVouchersModal(
+    vouchers: List<GiftVoucher>,
+    allUsers: Map<String, UserProfile>,
+    onDismiss: () -> Unit,
+    onGenerate: (String, String, Double) -> Unit,
+    onCopy: (String, String) -> Unit
+) {
+    var activeTab by remember { mutableStateOf("Active") }
+    var claimerUid by remember { mutableStateOf("") }
+    var referredUid by remember { mutableStateOf("") }
+    var amountStr by remember { mutableStateOf("25") }
+    var verificationMsg by remember { mutableStateOf("") }
+
+    BaseCockpitDialog(title = "Gift Voucher Generator & Logs", onDismiss = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth().height(420.dp)) {
+            OutlinedTextField(value = claimerUid, onValueChange = { claimerUid = it }, label = { Text("Claimer UID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = referredUid, onValueChange = { referredUid = it }, label = { Text("Referred UID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            OutlinedTextField(value = amountStr, onValueChange = { amountStr = it }, label = { Text("Bonus (৳)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Button(
+                    onClick = {
+                        val claimer = allUsers.values.find { it.uid == claimerUid }
+                        val referred = allUsers.values.find { it.uid == referredUid }
+                        if (claimer == null || referred == null) {
+                            verificationMsg = "UID নট ফাউন্ড!"
+                        } else if (referred.referred_by != claimerUid) {
+                            verificationMsg = "✗ MISMATCH (রেফারেল মিল নেই!)"
+                        } else {
+                            val depSum = referred.deposits?.values?.filter { it.status == "Success" }?.sumOf { it.amount } ?: 0.0
+                            val feePaid = depSum >= 40.0 || referred.verification_fee_paid || referred.active
+                            verificationMsg = "Claimer: ${claimer.name} | Ref: ${referred.name}\n" + (if (feePaid) "✓ VERIFIED (৪০৳ ডিপোজিট পেইড!)" else "✗ ৪০৳ ফি দেওয়া হয়নি!")
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D332B))
+                ) {
+                    Text("যাচাই করুন", color = NeonCyan, fontSize = 10.sp)
+                }
+
+                Button(
+                    onClick = {
+                        val amt = amountStr.toDoubleOrNull() ?: 25.0
+                        if (claimerUid.length == 6 && referredUid.length == 6) {
+                            onGenerate(claimerUid, referredUid, amt)
+                        }
+                    },
+                    modifier = Modifier.weight(1.2f),
+                    colors = ButtonDefaults.buttonColors(containerColor = GoldMetallicMain)
+                ) {
+                    Text("কোড তৈরি করুন", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            if (verificationMsg.isNotEmpty()) {
+                Text(verificationMsg, color = if (verificationMsg.contains("✓")) NeonGreen else NeonRose, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 4.dp))
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { activeTab = "Active" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "Active") NeonGreen else Color(0xFF1D202D))) {
+                    Text("Active / Unclaimed", color = if (activeTab == "Active") Color.Black else TextDimGray, fontSize = 10.sp)
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                Button(onClick = { activeTab = "Claimed" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "Claimed") NeonGreen else Color(0xFF1D202D))) {
+                    Text("Claimed History", color = if (activeTab == "Claimed") Color.Black else TextDimGray, fontSize = 10.sp)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            val filtered = vouchers.filter { if (activeTab == "Active") it.status == "active" else it.status != "active" }
+
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                items(filtered) { v ->
+                    val claimer = allUsers.values.find { it.uid == v.targetUid }
+                    val referred = allUsers.values.find { it.uid == v.referredUid }
+
+                    Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926))) {
+                        Row(modifier = Modifier.padding(8.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column {
+                                Text(v.code, color = NeonYellow, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("For: ${claimer?.name ?: "User"} (UID: ${v.targetUid}) | Ref: ${referred?.name ?: "N/A"}", color = TextDimGray, fontSize = 9.sp)
+                                if (v.status != "active") {
+                                    Text("Claimed on: ${v.claimedDate.ifEmpty { v.date }}", color = NeonGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Button(onClick = { onCopy(v.code, "ভাউচার কোড") }, modifier = Modifier.height(26.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D202D))) {
+                                Text("Copy", color = NeonCyan, fontSize = 8.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// ১১. WhatsApp Style Support Chat Modal
+// -------------------------------------------------------------
+@Composable
+fun WhatsAppStyleSupportChatModal(
+    chats: Map<String, List<ChatMessage>>,
+    allUsers: Map<String, UserProfile>,
+    onDismiss: () -> Unit,
+    onSendReply: (String, String) -> Unit,
+    onMarkSeen: (String, String) -> Unit,
+    onClearChat: (String) -> Unit
+) {
+    var selectedPhone by remember { mutableStateOf<String?>(chats.keys.firstOrNull()) }
+    var replyText by remember { mutableStateOf("") }
+
+    BaseCockpitDialog(title = "Live Support Helpdesk", onDismiss = onDismiss) {
+        Row(modifier = Modifier.fillMaxWidth().height(420.dp)) {
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxHeight().border(1.dp, Color(0xFF262B3D))) {
+                items(chats.keys.toList()) { phone ->
+                    val user = allUsers[phone]
+                    val unread = chats[phone]?.count { it.sender == "user" && !it.seen } ?: 0
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(if (selectedPhone == phone) Color(0xFF0D332B) else Color.Transparent)
+                            .clickable { selectedPhone = phone }
+                            .padding(8.dp)
+                    ) {
+                        Column {
+                            Text(user?.name?.ifEmpty { "User" } ?: phone, color = TextPureWhite, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            Text("UID: ${user?.uid ?: "---"}", color = NeonCyan, fontSize = 9.sp)
+                            if (unread > 0) {
+                                Text("$unread New Msg", color = NeonRose, fontSize = 8.5.sp, fontWeight = FontWeight.Black)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            selectedPhone?.let { phone ->
+                val user = allUsers[phone]
+                val msgList = chats[phone] ?: emptyList()
+
+                Column(modifier = Modifier.weight(2.2f).fillMaxHeight()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().background(Color(0xFF161926), RoundedCornerShape(8.dp)).padding(6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(user?.name?.ifEmpty { "Customer" } ?: phone, color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("UID: ${user?.uid ?: "---"} (${phone})", color = TextDimGray, fontSize = 9.sp)
+                        }
+                        IconButton(onClick = { onClearChat(phone) }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Filled.Delete, contentDescription = "Clear", tint = NeonRose, modifier = Modifier.size(16.dp))
+                        }
+                    }
+
+                    LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(msgList) { msg ->
+                            if (msg.sender == "user" && !msg.seen) {
+                                onMarkSeen(phone, msg.id)
+                            }
+                            val isUser = msg.sender == "user"
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = if (isUser) Alignment.CenterStart else Alignment.CenterEnd
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            if (isUser) Color(0xFF1E2433) else Color(0xFF005C4B),
+                                            RoundedCornerShape(10.dp)
+                                        )
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(msg.text, color = Color.White, fontSize = 11.5.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = replyText,
+                            onValueChange = { replyText = it },
+                            placeholder = { Text("Type reply...", fontSize = 10.sp) },
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            singleLine = true
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Button(
+                            onClick = {
+                                if (replyText.isNotEmpty()) {
+                                    onSendReply(phone, replyText)
+                                    replyText = ""
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen),
+                            modifier = Modifier.height(42.dp)
+                        ) {
+                            Icon(Icons.Filled.Send, contentDescription = "Send", tint = Color.Black, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// বাকি সাপোর্টিং মডালস (SendMoney, Recharges, Typing, Reset, Settings)
 // -------------------------------------------------------------
 @Composable
 fun SendMoneyManagerModal(
     requests: List<SendMoneyRequest>,
-    users: Map<String, UserProfile>,
     onDismiss: () -> Unit,
     onApprove: (SendMoneyRequest) -> Unit,
-    onReject: (SendMoneyRequest) -> Unit
+    onReject: (SendMoneyRequest) -> Unit,
+    onCopy: (String, String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Pending") }
     val filtered = requests.filter { if (activeTab == "Pending") it.status == "Pending" else it.status != "Pending" }
@@ -1226,11 +1827,11 @@ fun SendMoneyManagerModal(
     BaseCockpitDialog(title = "Send Money Requests", onDismiss = onDismiss) {
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
             Button(onClick = { activeTab = "Pending" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "Pending") NeonGreen else Color(0xFF1D202D))) {
-                Text("Pending", color = if (activeTab == "Pending") Color.Black else TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Pending", color = if (activeTab == "Pending") Color.Black else TextDimGray, fontSize = 11.sp)
             }
             Spacer(modifier = Modifier.width(6.dp))
             Button(onClick = { activeTab = "History" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "History") NeonGreen else Color(0xFF1D202D))) {
-                Text("History", color = if (activeTab == "History") Color.Black else TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("History", color = if (activeTab == "History") Color.Black else TextDimGray, fontSize = 11.sp)
             }
         }
 
@@ -1240,7 +1841,7 @@ fun SendMoneyManagerModal(
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text("Sender: ${req.senderName} (${req.sender})", color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Text("Receiver: ${req.targetName} (${req.target})", color = NeonCyan, fontSize = 11.sp)
-                        Text("Amount: ৳${req.amount} | Fee(5%): ৳${req.fee} | Total: ৳${req.totalDeducted}", color = GoldMetallicLight, fontSize = 10.5.sp)
+                        Text("Amount: ৳${req.amount} | Fee: ৳${req.fee} | Total: ৳${req.totalDeducted}", color = GoldMetallicLight, fontSize = 10.sp)
 
                         if (req.status == "Pending") {
                             Spacer(modifier = Modifier.height(6.dp))
@@ -1260,32 +1861,29 @@ fun SendMoneyManagerModal(
     }
 }
 
-// -------------------------------------------------------------
-// ৬. Recharges Manager Modal
-// -------------------------------------------------------------
 @Composable
 fun RechargesManagerModal(
     users: Map<String, UserProfile>,
     onDismiss: () -> Unit,
     onApprove: (String, String) -> Unit,
-    onReject: (String, String, Double) -> Unit
+    onReject: (String, String, Double) -> Unit,
+    onCopy: (String, String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Pending") }
+    val allRc = users.flatMap { (phone, u) ->
+        u.recharges?.values?.map { rc -> Pair(u, rc) } ?: emptyList()
+    }.filter { if (activeTab == "Pending") it.second.status == "Pending" else it.second.status != "Pending" }
 
     BaseCockpitDialog(title = "Mobile Recharge Operations", onDismiss = onDismiss) {
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
             Button(onClick = { activeTab = "Pending" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "Pending") NeonGreen else Color(0xFF1D202D))) {
-                Text("Pending", color = if (activeTab == "Pending") Color.Black else TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Pending", color = if (activeTab == "Pending") Color.Black else TextDimGray, fontSize = 11.sp)
             }
             Spacer(modifier = Modifier.width(6.dp))
             Button(onClick = { activeTab = "History" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "History") NeonGreen else Color(0xFF1D202D))) {
-                Text("History", color = if (activeTab == "History") Color.Black else TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("History", color = if (activeTab == "History") Color.Black else TextDimGray, fontSize = 11.sp)
             }
         }
-
-        val allRc = users.flatMap { (phone, u) ->
-            u.recharges?.values?.map { rc -> Pair(u, rc) } ?: emptyList()
-        }.filter { if (activeTab == "Pending") it.second.status == "Pending" else it.second.status != "Pending" }
 
         LazyColumn(modifier = Modifier.fillMaxWidth().height(360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(allRc) { (user, rc) ->
@@ -1295,7 +1893,11 @@ fun RechargesManagerModal(
                             Text("${user.name} (${user.phone})", color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             Text("৳${rc.amount}", color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
-                        Text("Operator: ${rc.operator} (${rc.type}) | Number: ${rc.number}", color = NeonCyan, fontSize = 10.5.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Operator: ${rc.operator} (${rc.type}) - ${rc.number}", color = NeonCyan, fontSize = 10.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = NeonCyan, modifier = Modifier.size(11.dp).clickable { onCopy(rc.number, "রিচার্জ নম্বর") })
+                        }
 
                         if (rc.status == "Pending") {
                             Spacer(modifier = Modifier.height(6.dp))
@@ -1315,124 +1917,6 @@ fun RechargesManagerModal(
     }
 }
 
-// -------------------------------------------------------------
-// ৭. Gift Vouchers Manager Modal
-// -------------------------------------------------------------
-@Composable
-fun GiftVouchersModal(
-    vouchers: List<GiftVoucher>,
-    allUsers: Map<String, UserProfile>,
-    onDismiss: () -> Unit,
-    onGenerate: (String, String, Double) -> Unit
-) {
-    var claimerUid by remember { mutableStateOf("") }
-    var referredUid by remember { mutableStateOf("") }
-    var amountStr by remember { mutableStateOf("25") }
-    var verificationMsg by remember { mutableStateOf("") }
-    val clipboard = LocalClipboardManager.current
-    val context = LocalContext.current
-
-    BaseCockpitDialog(title = "Gift Voucher Generator & Security", onDismiss = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().height(420.dp).verticalScroll(rememberScrollState())) {
-            OutlinedTextField(
-                value = claimerUid,
-                onValueChange = { claimerUid = it },
-                label = { Text("Claimer UID (৬ ডিজিট)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            OutlinedTextField(
-                value = referredUid,
-                onValueChange = { referredUid = it },
-                label = { Text("Referred UID (৬ ডিজিট)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            OutlinedTextField(
-                value = amountStr,
-                onValueChange = { amountStr = it },
-                label = { Text("Bonus Amount (৳)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Button(
-                    onClick = {
-                        val claimer = allUsers.values.find { it.uid == claimerUid }
-                        val referred = allUsers.values.find { it.uid == referredUid }
-                        if (claimer == null || referred == null) {
-                            verificationMsg = "UID নট ফাউন্ড!"
-                        } else if (referred.referred_by != claimerUid) {
-                            verificationMsg = "✗ MISMATCH (রেফারেল মিল নেই!)"
-                        } else {
-                            val depSum = referred.deposits?.values?.filter { it.status == "Success" }?.sumOf { it.amount } ?: 0.0
-                            val feePaid = depSum >= 40.0 || referred.verification_fee_paid || referred.active
-                            verificationMsg = if (feePaid) "✓ VERIFIED (রেফারেল ও ৪০৳ সঠিক!)" else "✗ ৪০৳ ডিপোজিট বা ফি পাওয়া যায়নি!"
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D332B))
-                ) {
-                    Text("১. যাচাই করুন", color = NeonCyan, fontSize = 10.sp)
-                }
-
-                Button(
-                    onClick = {
-                        val amt = amountStr.toDoubleOrNull() ?: 25.0
-                        if (claimerUid.length == 6 && referredUid.length == 6) {
-                            onGenerate(claimerUid, referredUid, amt)
-                            Toast.makeText(context, "কোড তৈরি হয়েছে!", Toast.LENGTH_SHORT).show()
-                        } else {
-                            Toast.makeText(context, "সঠিক ৬ ডিজিটের UID দিন!", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    modifier = Modifier.weight(1.3f),
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldMetallicMain)
-                ) {
-                    Text("২. কোড তৈরি করুন", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            if (verificationMsg.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(verificationMsg, color = if (verificationMsg.contains("✓")) NeonGreen else NeonRose, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            Text("Active Vouchers Log", color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-
-            vouchers.forEach { v ->
-                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                    Row(modifier = Modifier.padding(8.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Column {
-                            Text(v.code, color = NeonYellow, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                            Text("Claimer: ${v.targetUid} | Bonus: ৳${v.amount}", color = TextDimGray, fontSize = 9.sp)
-                        }
-                        Button(
-                            onClick = {
-                                clipboard.setText(AnnotatedString(v.code))
-                                Toast.makeText(context, "কপি হয়েছে!", Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.height(26.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D202D))
-                        ) {
-                            Text("Copy", color = NeonCyan, fontSize = 8.sp)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// ৮. Typing Tasks Checker Modal
-// -------------------------------------------------------------
 @Composable
 fun TypingTasksModal(
     users: Map<String, UserProfile>,
@@ -1442,21 +1926,20 @@ fun TypingTasksModal(
     onReject: (String, String, Double, String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Pending") }
+    val allTasks = users.flatMap { (phone, u) ->
+        u.paragraph_jobs?.values?.map { t -> Pair(u, t) } ?: emptyList()
+    }.filter { if (activeTab == "Pending") it.second.status == "Pending" else it.second.status != "Pending" }
 
     BaseCockpitDialog(title = "Typing Tasks Checker", onDismiss = onDismiss) {
         Row(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
             Button(onClick = { activeTab = "Pending" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "Pending") NeonGreen else Color(0xFF1D202D))) {
-                Text("Pending", color = if (activeTab == "Pending") Color.Black else TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Pending", color = if (activeTab == "Pending") Color.Black else TextDimGray, fontSize = 11.sp)
             }
             Spacer(modifier = Modifier.width(6.dp))
             Button(onClick = { activeTab = "History" }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = if (activeTab == "History") NeonGreen else Color(0xFF1D202D))) {
-                Text("History", color = if (activeTab == "History") Color.Black else TextDimGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("History", color = if (activeTab == "History") Color.Black else TextDimGray, fontSize = 11.sp)
             }
         }
-
-        val allTasks = users.flatMap { (phone, u) ->
-            u.paragraph_jobs?.values?.map { t -> Pair(u, t) } ?: emptyList()
-        }.filter { if (activeTab == "Pending") it.second.status == "Pending" else it.second.status != "Pending" }
 
         LazyColumn(modifier = Modifier.fillMaxWidth().height(360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(allTasks) { (user, task) ->
@@ -1477,7 +1960,7 @@ fun TypingTasksModal(
                                 Button(onClick = { onApprove(user.phone, task.id, task.amount, task.entry_fee) }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)) {
                                     Text("Approve", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Button(onClick = { onReject(user.phone, task.id, task.entry_fee, "নিয়ম অনুযায়ী লেখা সম্পন্ন হয়নি") }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = NeonRose)) {
+                                Button(onClick = { onReject(user.phone, task.id, task.entry_fee, "নিয়ম অনুযায়ী লেখা হয়নি") }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = NeonRose)) {
                                     Text("Reject", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
@@ -1489,105 +1972,6 @@ fun TypingTasksModal(
     }
 }
 
-// -------------------------------------------------------------
-// ৯. Support Chat Modal
-// -------------------------------------------------------------
-@Composable
-fun SupportChatModal(
-    chats: Map<String, List<ChatMessage>>,
-    onDismiss: () -> Unit,
-    onSendReply: (String, String) -> Unit,
-    onMarkSeen: (String, String) -> Unit,
-    onClearChat: (String) -> Unit
-) {
-    var selectedUserPhone by remember { mutableStateOf<String?>(chats.keys.firstOrNull()) }
-    var replyText by remember { mutableStateOf("") }
-
-    BaseCockpitDialog(title = "Live Support Helpdesk", onDismiss = onDismiss) {
-        Row(modifier = Modifier.fillMaxWidth().height(380.dp)) {
-            LazyColumn(modifier = Modifier.weight(1f).fillMaxHeight().border(1.dp, Color(0xFF262B3D))) {
-                items(chats.keys.toList()) { phone ->
-                    val unread = chats[phone]?.count { it.sender == "user" && !it.seen } ?: 0
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(if (selectedUserPhone == phone) Color(0xFF0D332B) else Color.Transparent)
-                            .clickable { selectedUserPhone = phone }
-                            .padding(8.dp)
-                    ) {
-                        Column {
-                            Text(phone, color = TextPureWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            if (unread > 0) {
-                                Text("$unread Unread", color = NeonRose, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            selectedUserPhone?.let { phone ->
-                val msgList = chats[phone] ?: emptyList()
-                Column(modifier = Modifier.weight(2f).fillMaxHeight()) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text(phone, color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Button(onClick = { onClearChat(phone) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF330D0D)), modifier = Modifier.height(24.dp)) {
-                            Text("Clear", color = NeonRose, fontSize = 8.sp)
-                        }
-                    }
-
-                    LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(msgList) { msg ->
-                            if (msg.sender == "user" && !msg.seen) {
-                                onMarkSeen(phone, msg.id)
-                            }
-                            Box(
-                                modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = if (msg.sender == "user") Alignment.CenterStart else Alignment.CenterEnd
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .background(if (msg.sender == "user") Color(0xFF161926) else NeonGreen, RoundedCornerShape(8.dp))
-                                        .padding(6.dp)
-                                ) {
-                                    Text(msg.text, color = if (msg.sender == "user") Color.White else Color.Black, fontSize = 11.sp)
-                                }
-                            }
-                        }
-                    }
-
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedTextField(
-                            value = replyText,
-                            onValueChange = { replyText = it },
-                            placeholder = { Text("Reply...", fontSize = 10.sp) },
-                            modifier = Modifier.weight(1f).height(42.dp),
-                            singleLine = true
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Button(
-                            onClick = {
-                                if (replyText.isNotEmpty()) {
-                                    onSendReply(phone, replyText)
-                                    replyText = ""
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen),
-                            modifier = Modifier.height(42.dp)
-                        ) {
-                            Text("Send", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------
-// ১০. Balance Reset Controller Modal
-// -------------------------------------------------------------
 @Composable
 fun BalanceResetModal(
     allUsers: Map<String, UserProfile>,
@@ -1601,46 +1985,28 @@ fun BalanceResetModal(
     BaseCockpitDialog(title = "Balance Reset Controller", onDismiss = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
             Text("১. নির্দিষ্ট ইউজারের ব্যালেন্স ৳০.০০ করুন", color = NeonCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-            Spacer(modifier = Modifier.height(4.dp))
-            OutlinedTextField(
-                value = searchInput,
-                onValueChange = { searchInput = it },
-                label = { Text("ফোন নম্বর অথবা ৬ ডিজিট UID") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
+            OutlinedTextField(value = searchInput, onValueChange = { searchInput = it }, label = { Text("ফোন নম্বর বা UID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Spacer(modifier = Modifier.height(6.dp))
             Button(
                 onClick = {
                     val user = allUsers[searchInput] ?: allUsers.values.find { it.uid == searchInput }
-                    if (user != null) {
-                        onResetSingle(user.phone)
-                        Toast.makeText(context, "${user.phone} এর ব্যালেন্স ৳০.০০ করা হয়েছে!", Toast.LENGTH_SHORT).show()
-                        searchInput = ""
-                    } else {
-                        Toast.makeText(context, "ইউজার পাওয়া যায়নি!", Toast.LENGTH_SHORT).show()
-                    }
+                    if (user != null) onResetSingle(user.phone)
+                    else Toast.makeText(context, "ইউজার পাওয়া যায়নি!", Toast.LENGTH_SHORT).show()
                 },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF663300))
             ) {
-                Text("নির্দিষ্ট ইউজারের ব্যালেন্স ০.০০ করুন", color = GoldMetallicLight, fontSize = 11.sp)
+                Text("ব্যালেন্স ০.০০ করুন", color = GoldMetallicLight, fontSize = 11.sp)
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
             Divider(color = Color(0xFF262B3D))
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            Text("২. সকল ইউজারের ব্যালেন্স এক ক্লিকে ৳০.০০ করুন", color = NeonRose, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text("২. সকল ইউজারের ব্যালেন্স একসাথে ৳০.০০ করুন", color = NeonRose, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             Spacer(modifier = Modifier.height(6.dp))
-            Text("মোট ইউজার: ${allUsers.size} জন", color = TextDimGray, fontSize = 10.sp)
-            Spacer(modifier = Modifier.height(8.dp))
             Button(
-                onClick = {
-                    onResetAll()
-                    Toast.makeText(context, "সকল ইউজারের ব্যালেন্স ৳০.০০ করা হয়েছে!", Toast.LENGTH_LONG).show()
-                    onDismiss()
-                },
+                onClick = onResetAll,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = NeonRose)
             ) {
@@ -1650,9 +2016,6 @@ fun BalanceResetModal(
     }
 }
 
-// -------------------------------------------------------------
-// ১১. System Settings & Gateways Modal
-// -------------------------------------------------------------
 @Composable
 fun SystemSettingsModal(
     db: FirebaseDatabase,
@@ -1681,7 +2044,7 @@ fun SystemSettingsModal(
     }
 
     BaseCockpitDialog(title = "System Gateways & Settings", onDismiss = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().height(420.dp).verticalScroll(rememberScrollState())) {
+        Column(modifier = Modifier.fillMaxWidth().height(400.dp).verticalScroll(rememberScrollState())) {
             Text("MFS Gateways", color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             OutlinedTextField(value = bkashNum, onValueChange = { bkashNum = it }, label = { Text("bKash Personal No.") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = bkashLbl, onValueChange = { bkashLbl = it }, label = { Text("bKash Label") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -1689,11 +2052,11 @@ fun SystemSettingsModal(
             OutlinedTextField(value = nagadLbl, onValueChange = { nagadLbl = it }, label = { Text("Nagad Label") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
 
             Spacer(modifier = Modifier.height(10.dp))
-            Text("Official Links", color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text("Links", color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             OutlinedTextField(value = tgLink, onValueChange = { tgLink = it }, label = { Text("Telegram Link") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = apkLink, onValueChange = { apkLink = it }, label = { Text("APK Download Link") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             Button(
                 onClick = {
                     db.getReference("admin_settings/deposit_targets/bKash").setValue(mapOf("number" to bkashNum, "label" to bkashLbl))
@@ -1712,64 +2075,52 @@ fun SystemSettingsModal(
 }
 
 // -------------------------------------------------------------
-// বটম বার ও হেডার হেল্পার
+// বটম বার (Home, Users, Reports, Commission)
 // -------------------------------------------------------------
 @Composable
-fun CockpitLuxuryBottomNav() {
-    var selectedItem by remember { mutableIntStateOf(0) }
-    val items = listOf("Home" to Icons.Rounded.Home, "Users" to Icons.Rounded.Groups, "Reports" to Icons.Rounded.BarChart, "Settings" to Icons.Rounded.Settings)
+fun CockpitLuxuryBottomNav(
+    selected: Int,
+    onSelect: (Int) -> Unit
+) {
+    val items = listOf(
+        "Home" to Icons.Rounded.Home,
+        "Users" to Icons.Rounded.Groups,
+        "Reports" to Icons.Rounded.BarChart,
+        "Commission" to Icons.Rounded.MonetizationOn
+    )
 
     NavigationBar(
         containerColor = Color(0xFF08090D),
         tonalElevation = 8.dp,
-        modifier = Modifier.height(60.dp).border(1.2.dp, GoldMetallicMain.copy(0.3f), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
+        modifier = Modifier
+            .height(60.dp)
+            .border(1.2.dp, GoldMetallicMain.copy(0.3f), RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
     ) {
         items.forEachIndexed { index, item ->
-            val isSelected = selectedItem == index
+            val isSelected = selected == index
             NavigationBarItem(
                 selected = isSelected,
-                onClick = { selectedItem = index },
+                onClick = { onSelect(index) },
                 icon = {
-                    Box(modifier = Modifier.size(if (isSelected) 32.dp else 24.dp).background(if (isSelected) GoldMetallicMain.copy(0.2f) else Color.Transparent, CircleShape), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .size(if (isSelected) 32.dp else 24.dp)
+                            .background(if (isSelected) GoldMetallicMain.copy(0.2f) else Color.Transparent, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(item.second, contentDescription = item.first, tint = if (isSelected) GoldMetallicLight else TextDimGray, modifier = Modifier.size(18.dp))
                     }
                 },
-                label = { Text(item.first, color = if (isSelected) GoldMetallicLight else TextDimGray, fontSize = 9.sp, fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal) },
+                label = {
+                    Text(
+                        item.first,
+                        color = if (isSelected) GoldMetallicLight else TextDimGray,
+                        fontSize = 9.sp,
+                        fontWeight = if (isSelected) FontWeight.Black else FontWeight.Normal
+                    )
+                },
                 colors = NavigationBarItemDefaults.colors(indicatorColor = Color.Transparent)
             )
-        }
-    }
-}
-
-@Composable
-fun HeaderBarCompact() {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-        Box(modifier = Modifier.size(40.dp).background(Color(0xFF1D202D), RoundedCornerShape(12.dp)).border(1.2.dp, GoldMetallicMain.copy(alpha = 0.5f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.Menu, contentDescription = "Menu", tint = GoldMetallicLight, modifier = Modifier.size(22.dp))
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(46.dp).background(Color.Black, CircleShape).border(2.dp, GoldMetallicMain, CircleShape), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = GoldMetallicLight, modifier = Modifier.size(12.dp))
-                    Text("RT", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                }
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text("RT GROWTH", color = GoldMetallicMain, fontWeight = FontWeight.Black, fontSize = 17.sp)
-                Text("COCKPIT", color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 12.sp, letterSpacing = 2.sp)
-                Text("MASTER COMMAND HUB", color = GoldMetallicMain.copy(alpha = 0.75f), fontSize = 7.5.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Box(modifier = Modifier.size(38.dp).background(Color(0xFF161824), CircleShape).border(1.2.dp, GoldMetallicMain.copy(0.4f), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Rounded.Notifications, contentDescription = null, tint = GoldMetallicLight, modifier = Modifier.size(20.dp))
-            }
-            Box(modifier = Modifier.size(38.dp).background(Color(0xFF161824), CircleShape).border(1.2.dp, GoldMetallicMain.copy(0.4f), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(Icons.Rounded.Person, contentDescription = null, tint = GoldMetallicLight, modifier = Modifier.size(20.dp))
-            }
         }
     }
 }
@@ -1806,6 +2157,35 @@ fun WelcomeCardCompact() {
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text("typing-5c3e4-default-rtdb", color = TextDimGray, fontSize = 8.sp)
+            }
+        }
+    }
+}
+
+@Composable
+fun BaseCockpitDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .shadow(24.dp, RoundedCornerShape(20.dp))
+                .background(Brush.verticalGradient(listOf(Color(0xFF161826), Color(0xFF090A0F))), RoundedCornerShape(20.dp))
+                .border(1.4.dp, GoldMetallicMain.copy(0.4f), RoundedCornerShape(20.dp))
+                .padding(14.dp)
+        ) {
+            Column {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = TextDimGray, modifier = Modifier.size(18.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                content()
             }
         }
     }
