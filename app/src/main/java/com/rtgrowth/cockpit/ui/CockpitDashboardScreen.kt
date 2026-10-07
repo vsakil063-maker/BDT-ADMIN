@@ -36,6 +36,7 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 val DarkCanvasBg = Color(0xFF07080B)
 val CardSurfaceBottom = Color(0xFF090A0E)
@@ -89,7 +90,8 @@ data class TransactionItem(
     val txid: String = "",
     val date: String = "",
     val status: String = "Pending",
-    val totalDeducted: Double = 0.0
+    val totalDeducted: Double = 0.0,
+    val admin_comment: String = ""
 )
 
 data class RechargeItem(
@@ -99,7 +101,8 @@ data class RechargeItem(
     val type: String = "",
     val number: String = "",
     val date: String = "",
-    val status: String = "Pending"
+    val status: String = "Pending",
+    val admin_comment: String = ""
 )
 
 data class TaskItem(
@@ -124,7 +127,8 @@ data class SendMoneyRecord(
     val targetName: String = "",
     val amount: Double = 0.0,
     val date: String = "",
-    val status: String = "Pending"
+    val status: String = "Pending",
+    val admin_comment: String = ""
 )
 
 data class SendMoneyRequest(
@@ -137,7 +141,8 @@ data class SendMoneyRequest(
     val fee: Double = 0.0,
     val totalDeducted: Double = 0.0,
     val date: String = "",
-    val status: String = "Pending"
+    val status: String = "Pending",
+    val admin_comment: String = ""
 )
 
 data class GiftVoucher(
@@ -165,6 +170,11 @@ data class ConfirmDialogState(
     val onConfirm: () -> Unit
 )
 
+data class RejectDialogState(
+    val title: String,
+    val onRejectWithReason: (reason: String) -> Unit
+)
+
 data class WorkspaceActionData(
     val title: String,
     val desc: String,
@@ -173,6 +183,28 @@ data class WorkspaceActionData(
     val badge: Int?,
     val modalId: String
 )
+
+// তারিখ যাচাই হেল্পার ফাংশন (১, ২, ৩, ৭ দিনের ফিল্টারিং)
+fun isWithinDays(dateStr: String, days: Int): Boolean {
+    if (dateStr.isEmpty()) return false
+    val formats = listOf(
+        SimpleDateFormat("d/M/yyyy", Locale.getDefault()),
+        SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()),
+        SimpleDateFormat("d/M/yyyy HH:mm", Locale.getDefault()),
+        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    )
+    for (f in formats) {
+        try {
+            val date = f.parse(dateStr.trim())
+            if (date != null) {
+                val diffMs = System.currentTimeMillis() - date.time
+                val diffDays = TimeUnit.MILLISECONDS.toDays(diffMs)
+                return diffDays in 0..days.toLong()
+            }
+        } catch (e: Exception) {}
+    }
+    return true // ফরম্যাট না মিললে বাই ডিফল্ট ট্রু
+}
 
 @Composable
 fun CockpitDashboardScreen() {
@@ -207,6 +239,7 @@ fun CockpitDashboardScreen() {
     var inspectingPhone by remember { mutableStateOf<String?>(null) }
     var inspectingTaskText by remember { mutableStateOf<String?>(null) }
     var confirmDialog by remember { mutableStateOf<ConfirmDialogState?>(null) }
+    var rejectDialog by remember { mutableStateOf<RejectDialogState?>(null) }
 
     fun copyWithToast(text: String, label: String) {
         clipboard.setText(AnnotatedString(text))
@@ -256,7 +289,8 @@ fun CockpitDashboardScreen() {
                             sender = d.child("sender").getValue(String::class.java) ?: "",
                             txid = d.child("txid").getValue(String::class.java) ?: "",
                             date = d.child("date").getValue(String::class.java) ?: "",
-                            status = d.child("status").getValue(String::class.java) ?: "Pending"
+                            status = d.child("status").getValue(String::class.java) ?: "Pending",
+                            admin_comment = d.child("admin_comment").getValue(String::class.java) ?: ""
                         )
                     }
 
@@ -269,7 +303,8 @@ fun CockpitDashboardScreen() {
                             wallet = w.child("wallet").getValue(String::class.java) ?: "",
                             date = w.child("date").getValue(String::class.java) ?: "",
                             status = w.child("status").getValue(String::class.java) ?: "Pending",
-                            totalDeducted = w.child("totalDeducted").getValue(Double::class.java) ?: amt
+                            totalDeducted = w.child("totalDeducted").getValue(Double::class.java) ?: amt,
+                            admin_comment = w.child("admin_comment").getValue(String::class.java) ?: ""
                         )
                     }
 
@@ -282,7 +317,8 @@ fun CockpitDashboardScreen() {
                             type = r.child("type").getValue(String::class.java) ?: "",
                             number = r.child("number").getValue(String::class.java) ?: "",
                             date = r.child("date").getValue(String::class.java) ?: "",
-                            status = r.child("status").getValue(String::class.java) ?: "Pending"
+                            status = r.child("status").getValue(String::class.java) ?: "Pending",
+                            admin_comment = r.child("admin_comment").getValue(String::class.java) ?: ""
                         )
                     }
 
@@ -315,7 +351,8 @@ fun CockpitDashboardScreen() {
                             targetName = s.child("targetName").getValue(String::class.java) ?: "",
                             amount = s.child("amount").getValue(Double::class.java) ?: 0.0,
                             date = s.child("date").getValue(String::class.java) ?: "",
-                            status = s.child("status").getValue(String::class.java) ?: "Success"
+                            status = s.child("status").getValue(String::class.java) ?: "Success",
+                            admin_comment = s.child("admin_comment").getValue(String::class.java) ?: ""
                         )
                     }
 
@@ -348,7 +385,8 @@ fun CockpitDashboardScreen() {
                             fee = child.child("fee").getValue(Double::class.java) ?: 0.0,
                             totalDeducted = child.child("totalDeducted").getValue(Double::class.java) ?: 0.0,
                             date = child.child("date").getValue(String::class.java) ?: "",
-                            status = child.child("status").getValue(String::class.java) ?: "Pending"
+                            status = child.child("status").getValue(String::class.java) ?: "Pending",
+                            admin_comment = child.child("admin_comment").getValue(String::class.java) ?: ""
                         )
                     )
                 }
@@ -532,13 +570,13 @@ fun CockpitDashboardScreen() {
                     }
                 }
                 1 -> {
-                    ActiveWorkers7DaysTab(
+                    ActiveWorkersTabWithFilter(
                         usersMap = usersMap,
                         onInspect = { phone -> inspectingPhone = phone; activeModalId = "inspect" }
                     )
                 }
                 2 -> {
-                    WorkReports7DaysTab(usersMap = usersMap)
+                    WorkReportsTabWithFilter(usersMap = usersMap)
                 }
                 3 -> {
                     CommissionsManagerTab(
@@ -558,6 +596,9 @@ fun CockpitDashboardScreen() {
             }
         }
 
+        // ==========================================
+        // পপআপ মডালসমূহ
+        // ==========================================
         when (activeModalId) {
             "directory" -> UserDirectoryModal(
                 users = usersMap.values.toList(),
@@ -624,13 +665,13 @@ fun CockpitDashboardScreen() {
                         }
                     )
                 },
-                onReject = { phone, id ->
-                    confirmDialog = ConfirmDialogState(
-                        title = "Reject Deposit",
-                        message = "ডিপোজিট রিকোয়েস্ট রিজেক্ট করবেন?",
-                        onConfirm = {
+                onRejectWithReasonPrompt = { phone, id ->
+                    rejectDialog = RejectDialogState(
+                        title = "Reject Deposit Request",
+                        onRejectWithReason = { reason ->
                             db.getReference("users/$phone/deposits/$id/status").setValue("Rejected")
-                            Toast.makeText(context, "ডিপোজিট রিজেক্ট করা হয়েছে!", Toast.LENGTH_SHORT).show()
+                            db.getReference("users/$phone/deposits/$id/admin_comment").setValue(reason)
+                            Toast.makeText(context, "ডিপোজিট রিজেক্ট ও কারণ সেভ করা হয়েছে!", Toast.LENGTH_SHORT).show()
                         }
                     )
                 },
@@ -651,13 +692,13 @@ fun CockpitDashboardScreen() {
                         }
                     )
                 },
-                onReject = { phone, id, refundAmount ->
-                    confirmDialog = ConfirmDialogState(
-                        title = "Reject Cash Out",
-                        message = "উইথড্র রিজেক্ট করে ৳$refundAmount ইউজারকে রিফান্ড করবেন?",
-                        onConfirm = {
+                onRejectWithReasonPrompt = { phone, id, refundAmount ->
+                    rejectDialog = RejectDialogState(
+                        title = "Reject Cash Out Request",
+                        onRejectWithReason = { reason ->
                             db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + refundAmount)
                             db.getReference("users/$phone/withdrawals/$id/status").setValue("Rejected")
+                            db.getReference("users/$phone/withdrawals/$id/admin_comment").setValue(reason)
                             Toast.makeText(context, "উইথড্র রিজেক্ট ও টাকা রিফান্ড হয়েছে!", Toast.LENGTH_SHORT).show()
                         }
                     )
@@ -681,15 +722,16 @@ fun CockpitDashboardScreen() {
                         }
                     )
                 },
-                onReject = { req ->
-                    confirmDialog = ConfirmDialogState(
-                        title = "Reject Send Money",
-                        message = "সেন্ড মানি রিজেক্ট করে ৳${req.totalDeducted} প্রেরককে ফেরত দেবেন?",
-                        onConfirm = {
+                onRejectWithReasonPrompt = { req ->
+                    rejectDialog = RejectDialogState(
+                        title = "Reject Send Money Request",
+                        onRejectWithReason = { reason ->
                             val senderBal = usersMap[req.sender]?.balance ?: 0.0
                             db.getReference("users/${req.sender}/balance").setValue(senderBal + req.totalDeducted)
                             db.getReference("pending_send_money/${req.id}/status").setValue("Rejected")
+                            db.getReference("pending_send_money/${req.id}/admin_comment").setValue(reason)
                             db.getReference("users/${req.sender}/sendmoney/${req.id}/status").setValue("Rejected")
+                            db.getReference("users/${req.sender}/sendmoney/${req.id}/admin_comment").setValue(reason)
                             Toast.makeText(context, "সেন্ড মানি রিজেক্ট ও রিফান্ড হয়েছে!", Toast.LENGTH_SHORT).show()
                         }
                     )
@@ -710,13 +752,13 @@ fun CockpitDashboardScreen() {
                         }
                     )
                 },
-                onReject = { phone, id, amount ->
-                    confirmDialog = ConfirmDialogState(
-                        title = "Reject Recharge",
-                        message = "রিচার্জ বাতিল করে ৳$amount ইউজারকে ফেরত দেবেন?",
-                        onConfirm = {
+                onRejectWithReasonPrompt = { phone, id, amount ->
+                    rejectDialog = RejectDialogState(
+                        title = "Reject Mobile Recharge",
+                        onRejectWithReason = { reason ->
                             db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + amount)
                             db.getReference("users/$phone/recharges/$id/status").setValue("Rejected")
+                            db.getReference("users/$phone/recharges/$id/admin_comment").setValue(reason)
                             Toast.makeText(context, "রিচার্জ বাতিল ও রিফান্ড হয়েছে!", Toast.LENGTH_SHORT).show()
                         }
                     )
@@ -740,6 +782,16 @@ fun CockpitDashboardScreen() {
                     )
                     db.getReference("valid_gift_vouchers/$code").setValue(vData)
                     Toast.makeText(context, "২১-ডিজিটের কোড তৈরি ও ডাটাবেজে লক হয়েছে!", Toast.LENGTH_SHORT).show()
+                },
+                onDeleteVoucher = { code ->
+                    confirmDialog = ConfirmDialogState(
+                        title = "Delete Gift Voucher",
+                        message = "আপনি কি এই $code ভাউচার কোডটি মুছে ফেলতে চান?",
+                        onConfirm = {
+                            db.getReference("valid_gift_vouchers/$code").removeValue()
+                            Toast.makeText(context, "ভাউচার মুছে ফেলা হয়েছে!", Toast.LENGTH_SHORT).show()
+                        }
+                    )
                 },
                 onCopy = ::copyWithToast
             )
@@ -771,17 +823,16 @@ fun CockpitDashboardScreen() {
                         }
                     )
                 },
-                onReject = { phone, id, entryFee, reason ->
-                    confirmDialog = ConfirmDialogState(
-                        title = "Reject Task",
-                        message = "কাজটি রিজেক্ট করবেন?",
-                        onConfirm = {
+                onRejectWithReasonPrompt = { phone, id, entryFee ->
+                    rejectDialog = RejectDialogState(
+                        title = "Reject Typing Task",
+                        onRejectWithReason = { reason ->
                             if (entryFee > 0) {
                                 db.getReference("users/$phone/balance").setValue((usersMap[phone]?.balance ?: 0.0) + entryFee)
                             }
                             db.getReference("users/$phone/paragraph_jobs/$id/status").setValue("Rejected")
                             db.getReference("users/$phone/paragraph_jobs/$id/admin_comment").setValue(reason)
-                            Toast.makeText(context, "টাস্ক রিজেক্ট করা হয়েছে!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "টাস্ক রিজেক্ট ও কারণ সেভ হয়েছে!", Toast.LENGTH_SHORT).show()
                         }
                     )
                 }
@@ -843,6 +894,47 @@ fun CockpitDashboardScreen() {
             )
         }
 
+        // রিজেকশন কারণ লেখার ডায়ালগ
+        rejectDialog?.let { dialog ->
+            var reasonText by remember { mutableStateOf("নিয়ম অনুযায়ী সম্পন্ন হয়নি") }
+            AlertDialog(
+                onDismissRequest = { rejectDialog = null },
+                title = { Text(dialog.title, color = NeonRose, fontWeight = FontWeight.Bold, fontSize = 14.sp) },
+                text = {
+                    Column {
+                        Text("ইউজারের কাছে প্রদর্শনের জন্য রিজেক্টের কারণ লিখুন:", color = TextPureWhite, fontSize = 11.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        OutlinedTextField(
+                            value = reasonText,
+                            onValueChange = { reasonText = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = false,
+                            maxLines = 3
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            dialog.onRejectWithReason(reasonText.trim().ifEmpty { "নিয়ম অনুযায়ী সম্পন্ন হয়নি" })
+                            rejectDialog = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonRose)
+                    ) {
+                        Text("Confirm Reject", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    Button(onClick = { rejectDialog = null }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D202D))) {
+                        Text("Cancel", color = TextDimGray)
+                    }
+                },
+                containerColor = Color(0xFF161824),
+                shape = RoundedCornerShape(16.dp)
+            )
+        }
+
+        // কনফার্মেশন ডায়ালগ
         confirmDialog?.let { dialog ->
             AlertDialog(
                 onDismissRequest = { confirmDialog = null },
@@ -860,10 +952,7 @@ fun CockpitDashboardScreen() {
                     }
                 },
                 dismissButton = {
-                    Button(
-                        onClick = { confirmDialog = null },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D202D))
-                    ) {
+                    Button(onClick = { confirmDialog = null }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D202D))) {
                         Text("Cancel", color = TextDimGray)
                     }
                 },
@@ -872,6 +961,7 @@ fun CockpitDashboardScreen() {
             )
         }
 
+        // টাস্ক পড়ার ফুল ডায়ালগ
         inspectingTaskText?.let { workText ->
             AlertDialog(
                 onDismissRequest = { inspectingTaskText = null },
@@ -965,7 +1055,7 @@ fun HeaderBarCompact(totalNotifications: Int) {
 }
 
 // -------------------------------------------------------------
-// ২. টপ স্ট্যাটাস কার্ডস
+// ২. টপ স্ট্যাটাস কার্ডস (ক্লিক ছাড়া)
 // -------------------------------------------------------------
 @Composable
 fun OverviewStatsNonClickable(
@@ -1112,39 +1202,54 @@ fun NonClickableStatCard(
 }
 
 // -------------------------------------------------------------
-// ৩. বটম নেভিগেশন ট্যাব ২: গত ৭ দিনের একটিভ ওয়ার্কার্স
+// ৩. বটম ট্যাব ২: এক্টিভ ওয়ার্কার্স (১, ২, ৩, ৭ দিনের ফিল্টার)
 // -------------------------------------------------------------
 @Composable
-fun ActiveWorkers7DaysTab(
+fun ActiveWorkersTabWithFilter(
     usersMap: Map<String, UserProfile>,
     onInspect: (String) -> Unit
 ) {
+    var selectedDays by remember { mutableIntStateOf(7) }
+
     val activeWorkers = usersMap.values.filter { u ->
-        u.paragraph_jobs?.values?.any { it.status == "Success" || it.status == "Pending" } == true
+        u.paragraph_jobs?.values?.any { task ->
+            (task.status == "Success" || task.status == "Pending") && isWithinDays(task.date, selectedDays)
+        } == true
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Text("Active Workers (Last 7 Days)", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
-        Text("Users who submitted typing tasks recently", color = TextDimGray, fontSize = 10.sp)
+        Text("Active Workers History", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // ফিল্টার চিপস
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf(1 to "Today", 2 to "2 Days", 3 to "3 Days", 7 to "7 Days").forEach { (days, label) ->
+                Button(
+                    onClick = { selectedDays = days },
+                    modifier = Modifier.weight(1f).height(30.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (selectedDays == days) NeonGreen else Color(0xFF1D202D)),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(label, color = if (selectedDays == days) Color.Black else TextDimGray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
 
         LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(activeWorkers) { user ->
-                val taskCount = user.paragraph_jobs?.size ?: 0
-                val totalEarned = user.paragraph_jobs?.values?.filter { it.status == "Success" }?.sumOf { it.amount } ?: 0.0
+                val taskCount = user.paragraph_jobs?.values?.count { isWithinDays(it.date, selectedDays) } ?: 0
+                val totalEarned = user.paragraph_jobs?.values?.filter { it.status == "Success" && isWithinDays(it.date, selectedDays) }?.sumOf { it.amount } ?: 0.0
 
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), shape = RoundedCornerShape(12.dp)) {
                     Row(modifier = Modifier.padding(10.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Column {
                             Text(user.name.ifEmpty { "Worker" }, color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             Text(user.phone, color = NeonGreen, fontSize = 11.sp)
-                            Text("Tasks: $taskCount | Total Earned: ৳${String.format("%.2f", totalEarned)}", color = NeonCyan, fontSize = 10.sp)
+                            Text("Tasks ($selectedDays Days): $taskCount | Earned: ৳${String.format("%.2f", totalEarned)}", color = NeonCyan, fontSize = 10.sp)
                         }
-                        Button(
-                            onClick = { onInspect(user.phone) },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D2633)),
-                            modifier = Modifier.height(28.dp)
-                        ) {
+                        Button(onClick = { onInspect(user.phone) }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D2633)), modifier = Modifier.height(28.dp)) {
                             Text("View Log", color = NeonCyan, fontSize = 9.sp)
                         }
                     }
@@ -1155,24 +1260,42 @@ fun ActiveWorkers7DaysTab(
 }
 
 // -------------------------------------------------------------
-// ৪. বটম নেভিগেশন ট্যাব ৩: গত ৭ দিনের রিপোর্টস
+// ৪. বটম ট্যাব ৩: রিপোর্টস (১, ২, ৩, ৭ দিনের ফিল্টার)
 // -------------------------------------------------------------
 @Composable
-fun WorkReports7DaysTab(usersMap: Map<String, UserProfile>) {
+fun WorkReportsTabWithFilter(usersMap: Map<String, UserProfile>) {
+    var selectedDays by remember { mutableIntStateOf(7) }
+
     val allTasks = usersMap.flatMap { (phone, u) ->
         u.paragraph_jobs?.values?.map { t -> Triple(u, phone, t) } ?: emptyList()
-    }.sortedByDescending { it.third.date }
+    }.filter { isWithinDays(it.third.date, selectedDays) }
+        .sortedByDescending { it.third.date }
 
     val approvedCount = allTasks.count { it.third.status == "Success" }
     val rejectedCount = allTasks.count { it.third.status == "Rejected" }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text("Work Submissions (7-Day Report)", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                Text("Approved: $approvedCount | Rejected: $rejectedCount", color = NeonGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("Work Submissions Report", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+            Text("App: $approvedCount | Rej: $rejectedCount", color = NeonGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // ফিল্টার চিপস
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf(1 to "Today", 2 to "2 Days", 3 to "3 Days", 7 to "7 Days").forEach { (days, label) ->
+                Button(
+                    onClick = { selectedDays = days },
+                    modifier = Modifier.weight(1f).height(30.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (selectedDays == days) NeonGreen else Color(0xFF1D202D)),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text(label, color = if (selectedDays == days) Color.Black else TextDimGray, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
+
         Spacer(modifier = Modifier.height(8.dp))
 
         LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1185,6 +1308,9 @@ fun WorkReports7DaysTab(usersMap: Map<String, UserProfile>) {
                         }
                         Text("Topic: \"${task.topic}\" | Reward: ৳${task.amount}", color = NeonCyan, fontSize = 10.sp)
                         Text("Date: ${task.date}", color = TextDimGray, fontSize = 9.sp)
+                        if (task.admin_comment.isNotEmpty()) {
+                            Text("Reason: ${task.admin_comment}", color = NeonRose, fontSize = 9.sp)
+                        }
                     }
                 }
             }
@@ -1193,7 +1319,7 @@ fun WorkReports7DaysTab(usersMap: Map<String, UserProfile>) {
 }
 
 // -------------------------------------------------------------
-// ৫. বটম নেভিগেশন ট্যাব ৪: কমিশন ম্যানেজার
+// ৫. বটম ট্যাব ৪: কমিশন ম্যানেজার
 // -------------------------------------------------------------
 @Composable
 fun CommissionsManagerTab(
@@ -1346,7 +1472,7 @@ fun WorkspaceCardItemLive(modifier: Modifier = Modifier, data: WorkspaceActionDa
 }
 
 // -------------------------------------------------------------
-// বেস ডায়ালগ ও ১০টি মডালস
+// বেস ডায়ালগ
 // -------------------------------------------------------------
 @Composable
 fun BaseCockpitDialog(
@@ -1357,7 +1483,8 @@ fun BaseCockpitDialog(
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.92f)
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.90f)
                 .shadow(24.dp, RoundedCornerShape(20.dp))
                 .background(Brush.verticalGradient(listOf(Color(0xFF161826), Color(0xFF090A0F))), RoundedCornerShape(20.dp))
                 .border(1.4.dp, GoldMetallicMain.copy(0.4f), RoundedCornerShape(20.dp))
@@ -1377,6 +1504,9 @@ fun BaseCockpitDialog(
     }
 }
 
+// -------------------------------------------------------------
+// ৭. User Directory Modal (Block/Unblock & Custom Edit)
+// -------------------------------------------------------------
 @Composable
 fun UserDirectoryModal(
     users: List<UserProfile>,
@@ -1404,7 +1534,7 @@ fun UserDirectoryModal(
         )
         Spacer(modifier = Modifier.height(8.dp))
 
-        LazyColumn(modifier = Modifier.fillMaxWidth().height(380.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(filtered) { user ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)),
@@ -1501,6 +1631,9 @@ fun UserDirectoryModal(
     }
 }
 
+// -------------------------------------------------------------
+// ৮. Inspect User Modal
+// -------------------------------------------------------------
 @Composable
 fun InspectUserModal(
     user: UserProfile,
@@ -1514,8 +1647,8 @@ fun InspectUserModal(
     val lastDeposits = user.deposits?.values?.toList()?.takeLast(3) ?: emptyList()
     val lastWithdrawals = user.withdrawals?.values?.toList()?.takeLast(3) ?: emptyList()
 
-    BaseCockpitDialog(title = "User Deep-Dive & All Records", onDismiss = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().height(420.dp).verticalScroll(rememberScrollState())) {
+    BaseCockpitDialog(title = "User Deep-Dive & Records", onDismiss = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1585,12 +1718,15 @@ fun InspectUserModal(
     }
 }
 
+// -------------------------------------------------------------
+// ৯. Deposits Manager Modal (কারণ লেখার বক্সসহ)
+// -------------------------------------------------------------
 @Composable
 fun DepositsManagerModal(
     users: Map<String, UserProfile>,
     onDismiss: () -> Unit,
     onApprove: (String, String, Double) -> Unit,
-    onReject: (String, String) -> Unit,
+    onRejectWithReasonPrompt: (String, String) -> Unit,
     onCopy: (String, String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Pending") }
@@ -1610,7 +1746,7 @@ fun DepositsManagerModal(
             u.deposits?.values?.map { dep -> Pair(u, dep) } ?: emptyList()
         }.filter { if (activeTab == "Pending") it.second.status == "Pending" else it.second.status != "Pending" }
 
-        LazyColumn(modifier = Modifier.fillMaxWidth().height(360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(allDeposits) { (user, dep) ->
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), shape = RoundedCornerShape(12.dp)) {
                     Column(modifier = Modifier.padding(10.dp)) {
@@ -1628,6 +1764,9 @@ fun DepositsManagerModal(
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = GoldMetallicLight, modifier = Modifier.size(11.dp).clickable { onCopy(dep.txid, "TxID") })
                         }
+                        if (dep.admin_comment.isNotEmpty()) {
+                            Text("Reason: ${dep.admin_comment}", color = NeonRose, fontSize = 9.sp)
+                        }
 
                         if (dep.status == "Pending") {
                             Spacer(modifier = Modifier.height(6.dp))
@@ -1635,7 +1774,7 @@ fun DepositsManagerModal(
                                 Button(onClick = { onApprove(user.phone, dep.id, dep.amount) }, colors = ButtonDefaults.buttonColors(containerColor = NeonGreen), modifier = Modifier.weight(1f).height(28.dp)) {
                                     Text("Approve", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Button(onClick = { onReject(user.phone, dep.id) }, colors = ButtonDefaults.buttonColors(containerColor = NeonRose), modifier = Modifier.weight(1f).height(28.dp)) {
+                                Button(onClick = { onRejectWithReasonPrompt(user.phone, dep.id) }, colors = ButtonDefaults.buttonColors(containerColor = NeonRose), modifier = Modifier.weight(1f).height(28.dp)) {
                                     Text("Reject", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
@@ -1647,13 +1786,16 @@ fun DepositsManagerModal(
     }
 }
 
+// -------------------------------------------------------------
+// ১০. Withdrawals Manager Modal (কারণ লেখার বক্সসহ)
+// -------------------------------------------------------------
 @Composable
 fun WithdrawalsManagerModal(
     users: Map<String, UserProfile>,
     onDismiss: () -> Unit,
     onInspect: (String) -> Unit,
     onApprove: (String, String) -> Unit,
-    onReject: (String, String, Double) -> Unit,
+    onRejectWithReasonPrompt: (String, String, Double) -> Unit,
     onCopy: (String, String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Pending") }
@@ -1673,7 +1815,7 @@ fun WithdrawalsManagerModal(
             u.withdrawals?.values?.map { wd -> Pair(u, wd) } ?: emptyList()
         }.filter { if (activeTab == "Pending") it.second.status == "Pending" else it.second.status != "Pending" }
 
-        LazyColumn(modifier = Modifier.fillMaxWidth().height(360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(allWds) { (user, wd) ->
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), shape = RoundedCornerShape(12.dp)) {
                     Column(modifier = Modifier.padding(10.dp)) {
@@ -1692,6 +1834,9 @@ fun WithdrawalsManagerModal(
                             }
                         }
                         Text("PIN: ${user.wallet?.co_pin ?: "---"} | Date: ${wd.date}", color = TextDimGray, fontSize = 9.5.sp)
+                        if (wd.admin_comment.isNotEmpty()) {
+                            Text("Reason: ${wd.admin_comment}", color = NeonRose, fontSize = 9.sp)
+                        }
 
                         if (wd.status == "Pending") {
                             Spacer(modifier = Modifier.height(6.dp))
@@ -1702,7 +1847,7 @@ fun WithdrawalsManagerModal(
                                 Button(onClick = { onApprove(user.phone, wd.id) }, colors = ButtonDefaults.buttonColors(containerColor = NeonGreen), modifier = Modifier.weight(1f).height(28.dp)) {
                                     Text("Approve", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Button(onClick = { onReject(user.phone, wd.id, wd.totalDeducted) }, colors = ButtonDefaults.buttonColors(containerColor = NeonRose), modifier = Modifier.weight(1f).height(28.dp)) {
+                                Button(onClick = { onRejectWithReasonPrompt(user.phone, wd.id, wd.totalDeducted) }, colors = ButtonDefaults.buttonColors(containerColor = NeonRose), modifier = Modifier.weight(1f).height(28.dp)) {
                                     Text("Reject", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
@@ -1714,12 +1859,16 @@ fun WithdrawalsManagerModal(
     }
 }
 
+// -------------------------------------------------------------
+// ১১. Gift Vouchers Modal (বড় ভিউ ও ডিলিট অপশন)
+// -------------------------------------------------------------
 @Composable
 fun GiftVouchersModal(
     vouchers: List<GiftVoucher>,
     allUsers: Map<String, UserProfile>,
     onDismiss: () -> Unit,
     onGenerate: (String, String, Double) -> Unit,
+    onDeleteVoucher: (String) -> Unit,
     onCopy: (String, String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Active") }
@@ -1729,7 +1878,8 @@ fun GiftVouchersModal(
     var verificationMsg by remember { mutableStateOf("") }
 
     BaseCockpitDialog(title = "Gift Voucher Generator & Logs", onDismiss = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().height(420.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            // Generator Section
             OutlinedTextField(value = claimerUid, onValueChange = { claimerUid = it }, label = { Text("Claimer UID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = referredUid, onValueChange = { referredUid = it }, label = { Text("Referred UID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = amountStr, onValueChange = { amountStr = it }, label = { Text("Bonus (৳)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -1747,7 +1897,7 @@ fun GiftVouchersModal(
                         } else {
                             val depSum = referred.deposits?.values?.filter { it.status == "Success" }?.sumOf { it.amount } ?: 0.0
                             val feePaid = depSum >= 40.0 || referred.verification_fee_paid || referred.active
-                            verificationMsg = "Claimer: ${claimer.name} | Ref: ${referred.name}\n" + (if (feePaid) "✓ VERIFIED (৪০৳ ডিপোজিট পেইড!)" else "✗ ৪০৳ ফি দেওয়া হয়নি!")
+                            verificationMsg = "Claimer: ${claimer.name} | Ref: ${referred.name}\n" + (if (feePaid) "✓ VERIFIED (৪০৳ পেইড!)" else "✗ ৪০৳ ফি পাওয়া যায়নি!")
                         }
                     },
                     modifier = Modifier.weight(1f),
@@ -1790,22 +1940,28 @@ fun GiftVouchersModal(
 
             val filtered = vouchers.filter { if (activeTab == "Active") it.status == "active" else it.status != "active" }
 
-            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(filtered) { v ->
                     val claimer = allUsers.values.find { it.uid == v.targetUid }
                     val referred = allUsers.values.find { it.uid == v.referredUid }
 
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926))) {
-                        Row(modifier = Modifier.padding(8.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column {
-                                Text(v.code, color = NeonYellow, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                Text("For: ${claimer?.name ?: "User"} (UID: ${v.targetUid}) | Ref: ${referred?.name ?: "N/A"}", color = TextDimGray, fontSize = 9.sp)
+                        Row(modifier = Modifier.padding(10.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(v.code, color = NeonYellow, fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                Text("Claimer: ${claimer?.name ?: "User"} (UID: ${v.targetUid})", color = TextPureWhite, fontSize = 9.5.sp)
+                                Text("Referred: ${referred?.name ?: "N/A"} (UID: ${v.referredUid}) | Bonus: ৳${v.amount}", color = TextDimGray, fontSize = 9.sp)
                                 if (v.status != "active") {
                                     Text("Claimed on: ${v.claimedDate.ifEmpty { v.date }}", color = NeonGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
-                            Button(onClick = { onCopy(v.code, "ভাউচার কোড") }, modifier = Modifier.height(26.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D202D))) {
-                                Text("Copy", color = NeonCyan, fontSize = 8.sp)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Button(onClick = { onCopy(v.code, "ভাউচার কোড") }, modifier = Modifier.height(26.dp), colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D202D))) {
+                                    Text("Copy", color = NeonCyan, fontSize = 8.sp)
+                                }
+                                IconButton(onClick = { onDeleteVoucher(v.code) }, modifier = Modifier.size(26.dp)) {
+                                    Icon(Icons.Filled.Delete, contentDescription = "Delete", tint = NeonRose, modifier = Modifier.size(16.dp))
+                                }
                             }
                         }
                     }
@@ -1815,6 +1971,9 @@ fun GiftVouchersModal(
     }
 }
 
+// -------------------------------------------------------------
+// ১২. WhatsApp Style Support Chat Modal (বড় ভিউ)
+// -------------------------------------------------------------
 @Composable
 fun WhatsAppStyleSupportChatModal(
     chats: Map<String, List<ChatMessage>>,
@@ -1828,7 +1987,8 @@ fun WhatsAppStyleSupportChatModal(
     var replyText by remember { mutableStateOf("") }
 
     BaseCockpitDialog(title = "Live Support Helpdesk", onDismiss = onDismiss) {
-        Row(modifier = Modifier.fillMaxWidth().height(420.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+            // User List (Name & UID)
             LazyColumn(modifier = Modifier.weight(1f).fillMaxHeight().border(1.dp, Color(0xFF262B3D))) {
                 items(chats.keys.toList()) { phone ->
                     val user = allUsers[phone]
@@ -1853,11 +2013,13 @@ fun WhatsAppStyleSupportChatModal(
 
             Spacer(modifier = Modifier.width(6.dp))
 
+            // WhatsApp Style Large Chat Box
             selectedPhone?.let { phone ->
                 val user = allUsers[phone]
                 val msgList = chats[phone] ?: emptyList()
 
-                Column(modifier = Modifier.weight(2.2f).fillMaxHeight()) {
+                Column(modifier = Modifier.weight(2.4f).fillMaxHeight()) {
+                    // Chat Header
                     Row(
                         modifier = Modifier.fillMaxWidth().background(Color(0xFF161926), RoundedCornerShape(8.dp)).padding(6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1872,6 +2034,7 @@ fun WhatsAppStyleSupportChatModal(
                         }
                     }
 
+                    // Message Bubbles
                     LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(msgList) { msg ->
                             if (msg.sender == "user" && !msg.seen) {
@@ -1890,18 +2053,19 @@ fun WhatsAppStyleSupportChatModal(
                                         )
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    Text(msg.text, color = Color.White, fontSize = 11.5.sp)
+                                    Text(msg.text, color = Color.White, fontSize = 12.sp)
                                 }
                             }
                         }
                     }
 
-                    Row(modifier = Modifier.fillMaxWidth()) {
+                    // Large Input Area
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = replyText,
                             onValueChange = { replyText = it },
-                            placeholder = { Text("Type reply...", fontSize = 10.sp) },
-                            modifier = Modifier.weight(1f).height(42.dp),
+                            placeholder = { Text("Type reply...", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f).height(48.dp),
                             singleLine = true
                         )
                         Spacer(modifier = Modifier.width(4.dp))
@@ -1913,9 +2077,9 @@ fun WhatsAppStyleSupportChatModal(
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = NeonGreen),
-                            modifier = Modifier.height(42.dp)
+                            modifier = Modifier.height(48.dp)
                         ) {
-                            Icon(Icons.Filled.Send, contentDescription = "Send", tint = Color.Black, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Filled.Send, contentDescription = "Send", tint = Color.Black, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -1924,12 +2088,15 @@ fun WhatsAppStyleSupportChatModal(
     }
 }
 
+// -------------------------------------------------------------
+// বাকি সাপোর্টিং মডালস (SendMoney, Recharges, Typing, Reset, Settings)
+// -------------------------------------------------------------
 @Composable
 fun SendMoneyManagerModal(
     requests: List<SendMoneyRequest>,
     onDismiss: () -> Unit,
     onApprove: (SendMoneyRequest) -> Unit,
-    onReject: (SendMoneyRequest) -> Unit,
+    onRejectWithReasonPrompt: (SendMoneyRequest) -> Unit,
     onCopy: (String, String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Pending") }
@@ -1946,13 +2113,16 @@ fun SendMoneyManagerModal(
             }
         }
 
-        LazyColumn(modifier = Modifier.fillMaxWidth().height(360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(filtered) { req ->
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), shape = RoundedCornerShape(12.dp)) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Text("Sender: ${req.senderName} (${req.sender})", color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         Text("Receiver: ${req.targetName} (${req.target})", color = NeonCyan, fontSize = 11.sp)
                         Text("Amount: ৳${req.amount} | Fee: ৳${req.fee} | Total: ৳${req.totalDeducted}", color = GoldMetallicLight, fontSize = 10.sp)
+                        if (req.admin_comment.isNotEmpty()) {
+                            Text("Reason: ${req.admin_comment}", color = NeonRose, fontSize = 9.sp)
+                        }
 
                         if (req.status == "Pending") {
                             Spacer(modifier = Modifier.height(6.dp))
@@ -1960,7 +2130,7 @@ fun SendMoneyManagerModal(
                                 Button(onClick = { onApprove(req) }, colors = ButtonDefaults.buttonColors(containerColor = NeonGreen), modifier = Modifier.weight(1f).height(28.dp)) {
                                     Text("Approve", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Button(onClick = { onReject(req) }, colors = ButtonDefaults.buttonColors(containerColor = NeonRose), modifier = Modifier.weight(1f).height(28.dp)) {
+                                Button(onClick = { onRejectWithReasonPrompt(req) }, colors = ButtonDefaults.buttonColors(containerColor = NeonRose), modifier = Modifier.weight(1f).height(28.dp)) {
                                     Text("Reject", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
@@ -1977,7 +2147,7 @@ fun RechargesManagerModal(
     users: Map<String, UserProfile>,
     onDismiss: () -> Unit,
     onApprove: (String, String) -> Unit,
-    onReject: (String, String, Double) -> Unit,
+    onRejectWithReasonPrompt: (String, String, Double) -> Unit,
     onCopy: (String, String) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Pending") }
@@ -1996,7 +2166,7 @@ fun RechargesManagerModal(
             }
         }
 
-        LazyColumn(modifier = Modifier.fillMaxWidth().height(360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(allRc) { (user, rc) ->
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), shape = RoundedCornerShape(12.dp)) {
                     Column(modifier = Modifier.padding(10.dp)) {
@@ -2009,6 +2179,9 @@ fun RechargesManagerModal(
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(Icons.Filled.ContentCopy, contentDescription = "Copy", tint = NeonCyan, modifier = Modifier.size(11.dp).clickable { onCopy(rc.number, "রিচার্জ নম্বর") })
                         }
+                        if (rc.admin_comment.isNotEmpty()) {
+                            Text("Reason: ${rc.admin_comment}", color = NeonRose, fontSize = 9.sp)
+                        }
 
                         if (rc.status == "Pending") {
                             Spacer(modifier = Modifier.height(6.dp))
@@ -2016,7 +2189,7 @@ fun RechargesManagerModal(
                                 Button(onClick = { onApprove(user.phone, rc.id) }, colors = ButtonDefaults.buttonColors(containerColor = NeonGreen), modifier = Modifier.weight(1f).height(28.dp)) {
                                     Text("Approve", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Button(onClick = { onReject(user.phone, rc.id, rc.amount) }, colors = ButtonDefaults.buttonColors(containerColor = NeonRose), modifier = Modifier.weight(1f).height(28.dp)) {
+                                Button(onClick = { onRejectWithReasonPrompt(user.phone, rc.id, rc.amount) }, colors = ButtonDefaults.buttonColors(containerColor = NeonRose), modifier = Modifier.weight(1f).height(28.dp)) {
                                     Text("Reject", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
@@ -2034,7 +2207,7 @@ fun TypingTasksModal(
     onDismiss: () -> Unit,
     onReadWork: (String) -> Unit,
     onApprove: (String, String, Double, Double) -> Unit,
-    onReject: (String, String, Double, String) -> Unit
+    onRejectWithReasonPrompt: (String, String, Double) -> Unit
 ) {
     var activeTab by remember { mutableStateOf("Pending") }
     val allTasks = users.flatMap { (phone, u) ->
@@ -2052,7 +2225,7 @@ fun TypingTasksModal(
             }
         }
 
-        LazyColumn(modifier = Modifier.fillMaxWidth().height(360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(allTasks) { (user, task) ->
                 Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), shape = RoundedCornerShape(12.dp)) {
                     Column(modifier = Modifier.padding(10.dp)) {
@@ -2061,6 +2234,9 @@ fun TypingTasksModal(
                             Text("Reward: ৳${task.amount}", color = NeonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         Text("Topic: \"${task.topic}\" | Fee: ৳${task.entry_fee}", color = NeonCyan, fontSize = 10.sp)
+                        if (task.admin_comment.isNotEmpty()) {
+                            Text("Reason: ${task.admin_comment}", color = NeonRose, fontSize = 9.sp)
+                        }
 
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2071,7 +2247,7 @@ fun TypingTasksModal(
                                 Button(onClick = { onApprove(user.phone, task.id, task.amount, task.entry_fee) }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = NeonGreen)) {
                                     Text("Approve", color = Color.Black, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
-                                Button(onClick = { onReject(user.phone, task.id, task.entry_fee, "নিয়ম অনুযায়ী লেখা হয়নি") }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = NeonRose)) {
+                                Button(onClick = { onRejectWithReasonPrompt(user.phone, task.id, task.entry_fee) }, modifier = Modifier.weight(1f).height(28.dp), colors = ButtonDefaults.buttonColors(containerColor = NeonRose)) {
                                     Text("Reject", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
@@ -2155,7 +2331,7 @@ fun SystemSettingsModal(
     }
 
     BaseCockpitDialog(title = "System Gateways & Settings", onDismiss = onDismiss) {
-        Column(modifier = Modifier.fillMaxWidth().height(400.dp).verticalScroll(rememberScrollState())) {
+        Column(modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState())) {
             Text("MFS Gateways", color = GoldMetallicLight, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             OutlinedTextField(value = bkashNum, onValueChange = { bkashNum = it }, label = { Text("bKash Personal No.") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = bkashLbl, onValueChange = { bkashLbl = it }, label = { Text("bKash Label") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -2185,6 +2361,9 @@ fun SystemSettingsModal(
     }
 }
 
+// -------------------------------------------------------------
+// ১৩. বটম বার (Home, Users, Reports, Commission)
+// -------------------------------------------------------------
 @Composable
 fun CockpitLuxuryBottomNav(
     selected: Int,
