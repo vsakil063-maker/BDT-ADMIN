@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -34,10 +35,10 @@ class CockpitBackgroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         
-        // ১. ওয়েক-লক চালু (স্ক্রিন বন্ধ থাকলেও প্রসেসর চালু রাখবে)
+        // ১. স্ক্রিন অফ থাকলেও প্রসেসর চালু রাখার ওয়েক-লক
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Cockpit::LiveSyncWakeLock").apply {
-            acquire(24 * 60 * 60 * 1000L) // ২৪ ঘণ্টা ওয়েক-লক ধরে রাখবে
+            acquire(24 * 60 * 60 * 1000L)
         }
 
         createNotificationChannel()
@@ -46,7 +47,30 @@ class CockpitBackgroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY // কোনো কারণে বন্ধ হলে সিস্টেম নিজে থেকেই রিস্টার্ট করবে
+        // ফায়ারবেস কানেকশন জোরপূর্বক চালু রাখা
+        try {
+            FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com").goOnline()
+        } catch (e: Exception) {}
+        
+        return START_STICKY // সিস্টেম কিল করলেও যেন অটো রিস্টার্ট নেয়
+    }
+
+    // 💥 সবচেয়ে গুরুত্বপূর্ণ: রিসেন্ট থেকে সোয়াইপ করে কাটলে সার্ভিস স্বয়ংক্রিয়ভাবে রিস্টার্ট হবে
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        val restartServiceIntent = Intent(applicationContext, CockpitBackgroundService::class.java).also {
+            it.setPackage(packageName)
+        }
+        val restartServicePendingIntent = PendingIntent.getService(
+            applicationContext, 1, restartServiceIntent,
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val alarmService = applicationContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmService.set(
+            AlarmManager.ELAPSED_REALTIME,
+            SystemClock.elapsedRealtime() + 1000, // ১ সেকেন্ড পর রিস্টার্ট করবে
+            restartServicePendingIntent
+        )
+        super.onTaskRemoved(rootIntent)
     }
 
     private fun createNotificationChannel() {
@@ -59,6 +83,7 @@ class CockpitBackgroundService : Service() {
                 description = "Live alerts for deposits, withdrawals, tasks, and chats"
                 enableVibration(true)
                 setShowBadge(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -73,11 +98,11 @@ class CockpitBackgroundService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("RT Growth Cockpit Live Active")
-            .setContentText("Background real-time listener active...")
-            .setSmallIcon(R.drawable.ic_notification_bell) // আপডেট: বেল আইকন
+            .setContentTitle("RT Growth Cockpit Live")
+            .setContentText("সার্ভিস ব্যাকগ্রাউন্ডে সক্রিয় রয়েছে...")
+            .setSmallIcon(R.drawable.ic_notification_bell)
             .setContentIntent(pendingIntent)
-            .setOngoing(true)
+            .setOngoing(true) // যাতে ইউজার নোটিফিকেশন ডানে-বামে সরিয়ে বন্ধ না করে দেয়
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
@@ -92,7 +117,7 @@ class CockpitBackgroundService : Service() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(message)
-            .setSmallIcon(R.drawable.ic_notification_bell) // আপডেট: নতুন এলার্টেও বেল আইকন
+            .setSmallIcon(R.drawable.ic_notification_bell)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
@@ -116,8 +141,6 @@ class CockpitBackgroundService : Service() {
             }
 
             val db = FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
-            
-            // ফায়ারবেসকে ব্যাকগ্রাউন্ডে সক্রিয় রাখার কমান্ড
             db.goOnline()
             db.getReference("users").keepSynced(true)
             db.getReference("pending_send_money").keepSynced(true)
