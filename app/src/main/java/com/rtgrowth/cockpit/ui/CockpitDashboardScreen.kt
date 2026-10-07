@@ -1,5 +1,6 @@
 package com.rtgrowth.cockpit.ui
 
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -184,7 +185,6 @@ data class WorkspaceActionData(
     val modalId: String
 )
 
-// তারিখ যাচাই হেল্পার ফাংশন (১, ২, ৩, ৭ দিনের ফিল্টারিং)
 fun isWithinDays(dateStr: String, days: Int): Boolean {
     if (dateStr.isEmpty()) return false
     val formats = listOf(
@@ -203,7 +203,7 @@ fun isWithinDays(dateStr: String, days: Int): Boolean {
             }
         } catch (e: Exception) {}
     }
-    return true // ফরম্যাট না মিললে বাই ডিফল্ট ট্রু
+    return true
 }
 
 @Composable
@@ -596,9 +596,6 @@ fun CockpitDashboardScreen() {
             }
         }
 
-        // ==========================================
-        // পপআপ মডালসমূহ
-        // ==========================================
         when (activeModalId) {
             "directory" -> UserDirectoryModal(
                 users = usersMap.values.toList(),
@@ -877,12 +874,9 @@ fun CockpitDashboardScreen() {
                 onResetAll = {
                     confirmDialog = ConfirmDialogState(
                         title = "⚠️ BULK RESET ALL USERS",
-                        message = "চরম সতর্কতা: সকল ${usersMap.size} জন ইউজারের ব্যালেন্স একসাথে ৳০.০০ করবেন?",
+                        message = "চরম সতর্কতা: সকল ${usersMap.size} জন ইউজারের ব্যালেন্স ব্যাকআপ রেখে একসাথে ৳০.০০ করবেন?",
                         onConfirm = {
-                            val updates = mutableMapOf<String, Any>()
-                            usersMap.keys.forEach { p -> updates["users/$p/balance"] = 0.0 }
-                            db.reference.updateChildren(updates)
-                            Toast.makeText(context, "সকলের ব্যালেন্স ৳০.০০ রিসেট হয়েছে!", Toast.LENGTH_LONG).show()
+                            resetAllBalancesWithBackup(context)
                         }
                     )
                 }
@@ -894,7 +888,6 @@ fun CockpitDashboardScreen() {
             )
         }
 
-        // রিজেকশন কারণ লেখার ডায়ালগ
         rejectDialog?.let { dialog ->
             var reasonText by remember { mutableStateOf("নিয়ম অনুযায়ী সম্পন্ন হয়নি") }
             AlertDialog(
@@ -934,7 +927,6 @@ fun CockpitDashboardScreen() {
             )
         }
 
-        // কনফার্মেশন ডায়ালগ
         confirmDialog?.let { dialog ->
             AlertDialog(
                 onDismissRequest = { confirmDialog = null },
@@ -961,7 +953,6 @@ fun CockpitDashboardScreen() {
             )
         }
 
-        // টাস্ক পড়ার ফুল ডায়ালগ
         inspectingTaskText?.let { workText ->
             AlertDialog(
                 onDismissRequest = { inspectingTaskText = null },
@@ -978,9 +969,6 @@ fun CockpitDashboardScreen() {
     }
 }
 
-// -------------------------------------------------------------
-// ১. টপ হেডার
-// -------------------------------------------------------------
 @Composable
 fun HeaderBarCompact(totalNotifications: Int) {
     Row(
@@ -1054,9 +1042,6 @@ fun HeaderBarCompact(totalNotifications: Int) {
     }
 }
 
-// -------------------------------------------------------------
-// ২. টপ স্ট্যাটাস কার্ডস (ক্লিক ছাড়া)
-// -------------------------------------------------------------
 @Composable
 fun OverviewStatsNonClickable(
     totalUsers: Int,
@@ -1201,9 +1186,6 @@ fun NonClickableStatCard(
     }
 }
 
-// -------------------------------------------------------------
-// ৩. বটম ট্যাব ২: এক্টিভ ওয়ার্কার্স (১, ২, ৩, ৭ দিনের ফিল্টার)
-// -------------------------------------------------------------
 @Composable
 fun ActiveWorkersTabWithFilter(
     usersMap: Map<String, UserProfile>,
@@ -1221,7 +1203,6 @@ fun ActiveWorkersTabWithFilter(
         Text("Active Workers History", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
         Spacer(modifier = Modifier.height(6.dp))
 
-        // ফিল্টার চিপস
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf(1 to "Today", 2 to "2 Days", 3 to "3 Days", 7 to "7 Days").forEach { (days, label) ->
                 Button(
@@ -1259,9 +1240,6 @@ fun ActiveWorkersTabWithFilter(
     }
 }
 
-// -------------------------------------------------------------
-// ৪. বটম ট্যাব ৩: রিপোর্টস (১, ২, ৩, ৭ দিনের ফিল্টার)
-// -------------------------------------------------------------
 @Composable
 fun WorkReportsTabWithFilter(usersMap: Map<String, UserProfile>) {
     var selectedDays by remember { mutableIntStateOf(7) }
@@ -1282,7 +1260,6 @@ fun WorkReportsTabWithFilter(usersMap: Map<String, UserProfile>) {
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // ফিল্টার চিপস
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf(1 to "Today", 2 to "2 Days", 3 to "3 Days", 7 to "7 Days").forEach { (days, label) ->
                 Button(
@@ -1318,9 +1295,6 @@ fun WorkReportsTabWithFilter(usersMap: Map<String, UserProfile>) {
     }
 }
 
-// -------------------------------------------------------------
-// ৫. বটম ট্যাব ৪: কমিশন ম্যানেজার
-// -------------------------------------------------------------
 @Composable
 fun CommissionsManagerTab(
     usersMap: Map<String, UserProfile>,
@@ -1362,9 +1336,6 @@ fun CommissionsManagerTab(
     }
 }
 
-// -------------------------------------------------------------
-// ৬. লাইভ কমান্ড ডেক
-// -------------------------------------------------------------
 @Composable
 fun WorkspaceDeckLive(
     pendingDeposits: Int,
@@ -1471,9 +1442,6 @@ fun WorkspaceCardItemLive(modifier: Modifier = Modifier, data: WorkspaceActionDa
     }
 }
 
-// -------------------------------------------------------------
-// বেস ডায়ালগ
-// -------------------------------------------------------------
 @Composable
 fun BaseCockpitDialog(
     title: String,
@@ -1504,9 +1472,6 @@ fun BaseCockpitDialog(
     }
 }
 
-// -------------------------------------------------------------
-// ৭. User Directory Modal (Block/Unblock & Custom Edit)
-// -------------------------------------------------------------
 @Composable
 fun UserDirectoryModal(
     users: List<UserProfile>,
@@ -1631,9 +1596,6 @@ fun UserDirectoryModal(
     }
 }
 
-// -------------------------------------------------------------
-// ৮. Inspect User Modal
-// -------------------------------------------------------------
 @Composable
 fun InspectUserModal(
     user: UserProfile,
@@ -1718,9 +1680,6 @@ fun InspectUserModal(
     }
 }
 
-// -------------------------------------------------------------
-// ৯. Deposits Manager Modal (কারণ লেখার বক্সসহ)
-// -------------------------------------------------------------
 @Composable
 fun DepositsManagerModal(
     users: Map<String, UserProfile>,
@@ -1786,9 +1745,6 @@ fun DepositsManagerModal(
     }
 }
 
-// -------------------------------------------------------------
-// ১০. Withdrawals Manager Modal (কারণ লেখার বক্সসহ)
-// -------------------------------------------------------------
 @Composable
 fun WithdrawalsManagerModal(
     users: Map<String, UserProfile>,
@@ -1859,9 +1815,6 @@ fun WithdrawalsManagerModal(
     }
 }
 
-// -------------------------------------------------------------
-// ১১. Gift Vouchers Modal (বড় ভিউ ও ডিলিট অপশন)
-// -------------------------------------------------------------
 @Composable
 fun GiftVouchersModal(
     vouchers: List<GiftVoucher>,
@@ -1879,7 +1832,6 @@ fun GiftVouchersModal(
 
     BaseCockpitDialog(title = "Gift Voucher Generator & Logs", onDismiss = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            // Generator Section
             OutlinedTextField(value = claimerUid, onValueChange = { claimerUid = it }, label = { Text("Claimer UID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = referredUid, onValueChange = { referredUid = it }, label = { Text("Referred UID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             OutlinedTextField(value = amountStr, onValueChange = { amountStr = it }, label = { Text("Bonus (৳)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -1971,9 +1923,6 @@ fun GiftVouchersModal(
     }
 }
 
-// -------------------------------------------------------------
-// ১২. WhatsApp Style Support Chat Modal (বড় ভিউ)
-// -------------------------------------------------------------
 @Composable
 fun WhatsAppStyleSupportChatModal(
     chats: Map<String, List<ChatMessage>>,
@@ -1988,7 +1937,6 @@ fun WhatsAppStyleSupportChatModal(
 
     BaseCockpitDialog(title = "Live Support Helpdesk", onDismiss = onDismiss) {
         Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-            // User List (Name & UID)
             LazyColumn(modifier = Modifier.weight(1f).fillMaxHeight().border(1.dp, Color(0xFF262B3D))) {
                 items(chats.keys.toList()) { phone ->
                     val user = allUsers[phone]
@@ -2013,13 +1961,11 @@ fun WhatsAppStyleSupportChatModal(
 
             Spacer(modifier = Modifier.width(6.dp))
 
-            // WhatsApp Style Large Chat Box
             selectedPhone?.let { phone ->
                 val user = allUsers[phone]
                 val msgList = chats[phone] ?: emptyList()
 
                 Column(modifier = Modifier.weight(2.4f).fillMaxHeight()) {
-                    // Chat Header
                     Row(
                         modifier = Modifier.fillMaxWidth().background(Color(0xFF161926), RoundedCornerShape(8.dp)).padding(6.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -2034,7 +1980,6 @@ fun WhatsAppStyleSupportChatModal(
                         }
                     }
 
-                    // Message Bubbles
                     LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(msgList) { msg ->
                             if (msg.sender == "user" && !msg.seen) {
@@ -2059,7 +2004,6 @@ fun WhatsAppStyleSupportChatModal(
                         }
                     }
 
-                    // Large Input Area
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = replyText,
@@ -2088,9 +2032,6 @@ fun WhatsAppStyleSupportChatModal(
     }
 }
 
-// -------------------------------------------------------------
-// বাকি সাপোর্টিং মডালস (SendMoney, Recharges, Typing, Reset, Settings)
-// -------------------------------------------------------------
 @Composable
 fun SendMoneyManagerModal(
     requests: List<SendMoneyRequest>,
@@ -2269,7 +2210,7 @@ fun BalanceResetModal(
     var searchInput by remember { mutableStateOf("") }
     val context = LocalContext.current
 
-    BaseCockpitDialog(title = "Balance Reset Controller", onDismiss = onDismiss) {
+    BaseCockpitDialog(title = "Balance Reset & Restore Controller", onDismiss = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
             Text("১. নির্দিষ্ট ইউজারের ব্যালেন্স ৳০.০০ করুন", color = NeonCyan, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             OutlinedTextField(value = searchInput, onValueChange = { searchInput = it }, label = { Text("ফোন নম্বর বা UID") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
@@ -2290,14 +2231,28 @@ fun BalanceResetModal(
             Divider(color = Color(0xFF262B3D))
             Spacer(modifier = Modifier.height(10.dp))
 
-            Text("২. সকল ইউজারের ব্যালেন্স একসাথে ৳০.০০ করুন", color = NeonRose, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Text("২. সকল ইউজারের ব্যালেন্স ব্যাকআপ রেখে ৳০.০০ করুন", color = NeonRose, fontWeight = FontWeight.Bold, fontSize = 12.sp)
             Spacer(modifier = Modifier.height(6.dp))
             Button(
                 onClick = onResetAll,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = NeonRose)
             ) {
-                Text("সকলের ব্যালেন্স একসাথে ৳০.০০ করুন", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                Text("সকলের ব্যালেন্স একসাথে ৳০.০০ করুন (Auto-Backup)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+            Divider(color = Color(0xFF262B3D))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text("৩. পূর্বে কেটে নেওয়া ব্যালেন্স ফিরিয়ে দিন (Restore)", color = NeonGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Spacer(modifier = Modifier.height(6.dp))
+            Button(
+                onClick = { restoreAllBalances(context) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF006622))
+            ) {
+                Text("🔄 সকল ইউজারের ব্যালেন্স ফিরিয়ে দিন (Restore All)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
             }
         }
     }
@@ -2361,9 +2316,6 @@ fun SystemSettingsModal(
     }
 }
 
-// -------------------------------------------------------------
-// ১৩. বটম বার (Home, Users, Reports, Commission)
-// -------------------------------------------------------------
 @Composable
 fun CockpitLuxuryBottomNav(
     selected: Int,
@@ -2446,49 +2398,21 @@ fun WelcomeCardCompact() {
                 Text("typing-5c3e4-default-rtdb", color = TextDimGray, fontSize = 8.sp)
             }
         }
-  // --- ব্যালেন্স রিসেট ও রিস্টোর বাটন ---
-        val context = androidx.compose.ui.platform.LocalContext.current
-        
-        androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
-
-        androidx.compose.foundation.layout.Row(
-            modifier = androidx.compose.ui.Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
-        ) {
-            // ১. লাল রঙের ব্যালেন্স ০ করার বাটন
-            androidx.compose.material3.Button(
-                onClick = { resetAllBalancesWithBackup(context) },
-                modifier = androidx.compose.ui.Modifier.weight(1f),
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = androidx.compose.ui.graphics.Color(0xFFE53935)
-                )
-            ) {
-                androidx.compose.material3.Text("🗑️ Reset All", color = androidx.compose.ui.graphics.Color.White)
-            }
-
-            // ২. সবুজ রঙের ব্যালেন্স ফিরিয়ে দেওয়ার বাটন
-            androidx.compose.material3.Button(
-                onClick = { restoreAllBalances(context) },
-                modifier = androidx.compose.ui.Modifier.weight(1f),
-                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                    containerColor = androidx.compose.ui.graphics.Color(0xFF43A047)
-                )
-            ) {
-                androidx.compose.material3.Text("🔄 Restore All", color = androidx.compose.ui.graphics.Color.White)
-            }
-        }
     }
 }
+
+// =============================================================
+// ব্যালেন্স ব্যাকআপ ও রিস্টোর হেল্পার ফাংশন
+// =============================================================
+
 // ১. ব্যালেন্সের ব্যাকআপ রেখে ০ করার ফাংশন
-fun resetAllBalancesWithBackup(context: android.content.Context) {
-    val db = com.google.firebase.database.FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
+fun resetAllBalancesWithBackup(context: Context) {
+    val db = FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
     val usersRef = db.getReference("users")
     val backupRef = db.getReference("last_balance_backup")
 
-    usersRef.addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
-        override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+    usersRef.addListenerForSingleValueEvent(object : ValueEventListener {
+        override fun onDataChange(snapshot: DataSnapshot) {
             val backupData = mutableMapOf<String, Any>()
             val updates = mutableMapOf<String, Any>()
 
@@ -2501,26 +2425,26 @@ fun resetAllBalancesWithBackup(context: android.content.Context) {
 
             backupRef.setValue(backupData).addOnSuccessListener {
                 usersRef.updateChildren(updates).addOnSuccessListener {
-                    android.widget.Toast.makeText(context, "সব ব্যালেন্স ০ করা হয়েছে এবং ব্যাকআপ রাখা হয়েছে!", android.widget.Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "সব ব্যালেন্স ০ করা হয়েছে এবং ব্যাকআপ রাখা হয়েছে!", Toast.LENGTH_LONG).show()
                 }
             }.addOnFailureListener {
-                android.widget.Toast.makeText(context, "ব্যালেন্স রিসেট ব্যর্থ হয়েছে!", android.widget.Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "ব্যালেন্স রিসেট ব্যর্থ হয়েছে!", Toast.LENGTH_SHORT).show()
             }
         }
-        override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
+        override fun onCancelled(error: DatabaseError) {}
     })
 }
 
 // ২. আগের ব্যালেন্স ফিরিয়ে দেওয়ার ফাংশন (Restore)
-fun restoreAllBalances(context: android.content.Context) {
-    val db = com.google.firebase.database.FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
+fun restoreAllBalances(context: Context) {
+    val db = FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
     val backupRef = db.getReference("last_balance_backup")
     val usersRef = db.getReference("users")
 
-    backupRef.addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
-        override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+    backupRef.addListenerForSingleValueEvent(object : ValueEventListener {
+        override fun onDataChange(snapshot: DataSnapshot) {
             if (!snapshot.exists() || !snapshot.hasChildren()) {
-                android.widget.Toast.makeText(context, "ফেরত দেওয়ার মতো কোনো ব্যাকআপ পাওয়া যায়নি!", android.widget.Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "ফেরত দেওয়ার মতো কোনো ব্যাকআপ হিস্টোরি পাওয়া যায়নি!", Toast.LENGTH_LONG).show()
                 return
             }
 
@@ -2532,76 +2456,11 @@ fun restoreAllBalances(context: android.content.Context) {
             }
 
             usersRef.updateChildren(restoreUpdates).addOnSuccessListener {
-                android.widget.Toast.makeText(context, "সফলভাবে সবার ব্যালেন্স ফিরিয়ে দেওয়া হয়েছে! 🎉", android.widget.Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "সফলভাবে সবার ব্যালেন্স ফিরিয়ে দেওয়া হয়েছে! 🎉", Toast.LENGTH_LONG).show()
             }.addOnFailureListener {
-                android.widget.Toast.makeText(context, "ব্যালেন্স ফিরিয়ে দিতে সমস্যা হয়েছে!", android.widget.Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "ব্যালেন্স ফিরিয়ে দিতে সমস্যা হয়েছে!", Toast.LENGTH_SHORT).show()
             }
         }
-        override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
+        override fun onCancelled(error: DatabaseError) {}
     })
-// [আগের ড্যাশবোর্ডের কোড...]
-    }
-}
-
-// 👇 ঠিক এখান থেকে আপনার কোডটি বসবে 👇
-
-// ১. ব্যালেন্সের ব্যাকআপ রেখে ০ করার ফাংশন
-fun resetAllBalancesWithBackup(context: android.content.Context) {
-    val db = com.google.firebase.database.FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
-    val usersRef = db.getReference("users")
-    val backupRef = db.getReference("last_balance_backup")
-
-    usersRef.addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
-        override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
-            val backupData = mutableMapOf<String, Any>()
-            val updates = mutableMapOf<String, Any>()
-
-            for (userSnap in snapshot.children) {
-                val phone = userSnap.key ?: continue
-                val currentBalance = userSnap.child("balance").value ?: 0
-                backupData[phone] = currentBalance
-                updates["$phone/balance"] = 0
-            }
-
-            backupRef.setValue(backupData).addOnSuccessListener {
-                usersRef.updateChildren(updates).addOnSuccessListener {
-                    android.widget.Toast.makeText(context, "সব ব্যালেন্স ০ করা হয়েছে এবং ব্যাকআপ রাখা হয়েছে!", android.widget.Toast.LENGTH_LONG).show()
-                }
-            }.addOnFailureListener {
-                android.widget.Toast.makeText(context, "ব্যালেন্স রিসেট ব্যর্থ হয়েছে!", android.widget.Toast.LENGTH_SHORT).show()
-            }
-        }
-        override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
-    })
-}
-
-// ২. আগের ব্যালেন্স ফিরিয়ে দেওয়ার ফাংশন (Restore)
-fun restoreAllBalances(context: android.content.Context) {
-    val db = com.google.firebase.database.FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
-    val backupRef = db.getReference("last_balance_backup")
-    val usersRef = db.getReference("users")
-
-    backupRef.addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
-        override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
-            if (!snapshot.exists() || !snapshot.hasChildren()) {
-                android.widget.Toast.makeText(context, "ফেরত দেওয়ার মতো কোনো ব্যাকআপ পাওয়া যায়নি!", android.widget.Toast.LENGTH_LONG).show()
-                return
-            }
-
-            val restoreUpdates = mutableMapOf<String, Any>()
-            for (backupSnap in snapshot.children) {
-                val phone = backupSnap.key ?: continue
-                val previousBalance = backupSnap.value ?: 0
-                restoreUpdates["$phone/balance"] = previousBalance
-            }
-
-            usersRef.updateChildren(restoreUpdates).addOnSuccessListener {
-                android.widget.Toast.makeText(context, "সফলভাবে সবার ব্যালেন্স ফিরিয়ে দেওয়া হয়েছে! 🎉", android.widget.Toast.LENGTH_LONG).show()
-            }.addOnFailureListener {
-                android.widget.Toast.makeText(context, "ব্যালেন্স ফিরিয়ে দিতে সমস্যা হয়েছে!", android.widget.Toast.LENGTH_SHORT).show()
-            }
-        }
-        override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
-    })
-}
 }
