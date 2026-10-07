@@ -10,6 +10,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
+import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.messaging.FirebaseMessaging
 import com.rtgrowth.cockpit.ui.CockpitDashboardScreen
 import com.rtgrowth.cockpit.ui.theme.RTCockpitTheme
@@ -18,7 +19,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ১. ফায়ারবেস কানেকশন ইনিশিয়ালাইজ করা
+        // ১. ফায়ারবেস ইনিশিয়ালাইজ ও ডেটাবেস লাইভ কানেকশন অন করা
         try {
             if (FirebaseApp.getApps(this).isEmpty()) {
                 val options = FirebaseOptions.Builder()
@@ -29,14 +30,21 @@ class MainActivity : ComponentActivity() {
                     .build()
                 FirebaseApp.initializeApp(this, options)
             }
-            
-            // ২. বিকাশ/হোয়াটসঅ্যাপের মতো ক্লাউড নোটিফিকেশন টপিক অন করা
+
+            // ডেটাবেস অনলাইন ও লাইভ সিঙ্ক সচল করা (হিস্টোরি ও তথ্যের জন্য)
+            val db = FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
+            db.goOnline()
+            db.getReference("users").keepSynced(true)
+            db.getReference("pending_send_money").keepSynced(true)
+            db.getReference("chats").keepSynced(true)
+
+            // পুশ নোটিফিকেশন টপিক কানেক্ট করা
             FirebaseMessaging.getInstance().subscribeToTopic("admin_alerts")
         } catch (e: Exception) {
             e.printStackTrace()
         }
 
-        // ৩. নোটিফিকেশন পারমিশন চাওয়া (Android 13+)
+        // ২. নোটিফিকেশন পারমিশন চাওয়া (Android 13+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
