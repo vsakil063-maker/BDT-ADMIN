@@ -1,4 +1,4 @@
-package com.rtgrowth.cockpit.ui
+epackage com.rtgrowth.cockpit.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.*
@@ -2446,5 +2446,97 @@ fun WelcomeCardCompact() {
                 Text("typing-5c3e4-default-rtdb", color = TextDimGray, fontSize = 8.sp)
             }
         }
+  // --- ব্যালেন্স রিসেট ও রিস্টোর বাটন ---
+        val context = androidx.compose.ui.platform.LocalContext.current
+        
+        androidx.compose.foundation.layout.Spacer(modifier = androidx.compose.ui.Modifier.height(16.dp))
+
+        androidx.compose.foundation.layout.Row(
+            modifier = androidx.compose.ui.Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+        ) {
+            // ১. লাল রঙের ব্যালেন্স ০ করার বাটন
+            androidx.compose.material3.Button(
+                onClick = { resetAllBalancesWithBackup(context) },
+                modifier = androidx.compose.ui.Modifier.weight(1f),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = androidx.compose.ui.graphics.Color(0xFFE53935)
+                )
+            ) {
+                androidx.compose.material3.Text("🗑️ Reset All", color = androidx.compose.ui.graphics.Color.White)
+            }
+
+            // ২. সবুজ রঙের ব্যালেন্স ফিরিয়ে দেওয়ার বাটন
+            androidx.compose.material3.Button(
+                onClick = { restoreAllBalances(context) },
+                modifier = androidx.compose.ui.Modifier.weight(1f),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = androidx.compose.ui.graphics.Color(0xFF43A047)
+                )
+            ) {
+                androidx.compose.material3.Text("🔄 Restore All", color = androidx.compose.ui.graphics.Color.White)
+            }
+        }
     }
+}
+// ১. ব্যালেন্সের ব্যাকআপ রেখে ০ করার ফাংশন
+fun resetAllBalancesWithBackup(context: android.content.Context) {
+    val db = com.google.firebase.database.FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
+    val usersRef = db.getReference("users")
+    val backupRef = db.getReference("last_balance_backup")
+
+    usersRef.addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
+        override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+            val backupData = mutableMapOf<String, Any>()
+            val updates = mutableMapOf<String, Any>()
+
+            for (userSnap in snapshot.children) {
+                val phone = userSnap.key ?: continue
+                val currentBalance = userSnap.child("balance").value ?: 0
+                backupData[phone] = currentBalance
+                updates["$phone/balance"] = 0
+            }
+
+            backupRef.setValue(backupData).addOnSuccessListener {
+                usersRef.updateChildren(updates).addOnSuccessListener {
+                    android.widget.Toast.makeText(context, "সব ব্যালেন্স ০ করা হয়েছে এবং ব্যাকআপ রাখা হয়েছে!", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }.addOnFailureListener {
+                android.widget.Toast.makeText(context, "ব্যালেন্স রিসেট ব্যর্থ হয়েছে!", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
+    })
+}
+
+// ২. আগের ব্যালেন্স ফিরিয়ে দেওয়ার ফাংশন (Restore)
+fun restoreAllBalances(context: android.content.Context) {
+    val db = com.google.firebase.database.FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
+    val backupRef = db.getReference("last_balance_backup")
+    val usersRef = db.getReference("users")
+
+    backupRef.addListenerForSingleValueEvent(object : com.google.firebase.database.ValueEventListener {
+        override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+            if (!snapshot.exists() || !snapshot.hasChildren()) {
+                android.widget.Toast.makeText(context, "ফেরত দেওয়ার মতো কোনো ব্যাকআপ পাওয়া যায়নি!", android.widget.Toast.LENGTH_LONG).show()
+                return
+            }
+
+            val restoreUpdates = mutableMapOf<String, Any>()
+            for (backupSnap in snapshot.children) {
+                val phone = backupSnap.key ?: continue
+                val previousBalance = backupSnap.value ?: 0
+                restoreUpdates["$phone/balance"] = previousBalance
+            }
+
+            usersRef.updateChildren(restoreUpdates).addOnSuccessListener {
+                android.widget.Toast.makeText(context, "সফলভাবে সবার ব্যালেন্স ফিরিয়ে দেওয়া হয়েছে! 🎉", android.widget.Toast.LENGTH_LONG).show()
+            }.addOnFailureListener {
+                android.widget.Toast.makeText(context, "ব্যালেন্স ফিরিয়ে দিতে সমস্যা হয়েছে!", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+        override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
+    })
 }
