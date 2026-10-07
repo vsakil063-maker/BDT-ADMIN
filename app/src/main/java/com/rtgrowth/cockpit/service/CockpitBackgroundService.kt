@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -27,15 +28,24 @@ class CockpitBackgroundService : Service() {
     private val knownSendMoney = mutableSetOf<String>()
     private val knownChats = mutableSetOf<String>()
 
+    private var wakeLock: PowerManager.WakeLock? = null
+
     override fun onCreate() {
         super.onCreate()
+        
+        // ১. ওয়েক-লক চালু (স্ক্রিন বন্ধ থাকলেও প্রসেসর চালু রাখবে)
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Cockpit::LiveSyncWakeLock").apply {
+            acquire(24 * 60 * 60 * 1000L) // ২৪ ঘণ্টা ওয়েক-লক ধরে রাখবে
+        }
+
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createForegroundNotification())
         startFirebaseLiveMonitoring()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY // অ্যাপ ব্যাকগ্রাউন্ডে সবসময় চালু রাখবে
+        return START_STICKY // কোনো কারণে বন্ধ হলে সিস্টেম নিজে থেকেই রিস্টার্ট করবে
     }
 
     private fun createNotificationChannel() {
@@ -47,6 +57,7 @@ class CockpitBackgroundService : Service() {
             ).apply {
                 description = "Live alerts for deposits, withdrawals, tasks, and chats"
                 enableVibration(true)
+                setShowBadge(true)
             }
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -61,11 +72,12 @@ class CockpitBackgroundService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("RT Growth Cockpit Active")
-            .setContentText("Monitoring live transactions and messages...")
+            .setContentTitle("RT Growth Cockpit Live Active")
+            .setContentText("Background real-time listener active...")
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
@@ -80,7 +92,8 @@ class CockpitBackgroundService : Service() {
             .setContentTitle(title)
             .setContentText(message)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
@@ -102,6 +115,12 @@ class CockpitBackgroundService : Service() {
             }
 
             val db = FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
+            
+            // ফায়ারবেসকে ব্যাকগ্রাউন্ডে সক্রিয় রাখার কমান্ড
+            db.goOnline()
+            db.getReference("users").keepSynced(true)
+            db.getReference("pending_send_money").keepSynced(true)
+            db.getReference("chats").keepSynced(true)
 
             // ১. ডিপোজিট, উইথড্র, রিচার্জ, টাইপিং মনিটরিং
             db.getReference("users").addValueEventListener(object : ValueEventListener {
@@ -197,6 +216,13 @@ class CockpitBackgroundService : Service() {
             })
 
         } catch (e: Exception) {}
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
