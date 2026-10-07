@@ -1,3 +1,4 @@
+
 package com.rtgrowth.cockpit.ui
 
 import android.widget.Toast
@@ -18,7 +19,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -38,11 +38,7 @@ import com.google.firebase.database.*
 import java.text.SimpleDateFormat
 import java.util.*
 
-// ==========================================
-// 🎨 থিম কালার প্যালেট
-// ==========================================
 val DarkCanvasBg = Color(0xFF07080B)
-val CardSurfaceTop = Color(0xFF131520)
 val CardSurfaceBottom = Color(0xFF090A0E)
 
 val GoldMetallicLight = Color(0xFFFFE57F)
@@ -59,9 +55,6 @@ val NeonCyan = Color(0xFF00E5FF)
 val TextDimGray = Color(0xFF8A92A6)
 val TextPureWhite = Color(0xFFFFFFFF)
 
-// ==========================================
-// 🌐 ফায়ারবেস ডেটা মডেল
-// ==========================================
 data class UserProfile(
     val phone: String = "",
     val name: String = "",
@@ -182,9 +175,6 @@ data class WorkspaceActionData(
     val modalId: String
 )
 
-// ==========================================
-// 📱 মেইন ড্যাশবোর্ড স্ক্রিন
-// ==========================================
 @Composable
 fun CockpitDashboardScreen() {
     val context = LocalContext.current
@@ -224,7 +214,6 @@ fun CockpitDashboardScreen() {
         Toast.makeText(context, "$label কপি করা হয়েছে!", Toast.LENGTH_SHORT).show()
     }
 
-    // Firebase Data Listeners
     DisposableEffect(Unit) {
         val usersRef = db.getReference("users")
         val sendMoneyRef = db.getReference("pending_send_money")
@@ -508,7 +497,7 @@ fun CockpitDashboardScreen() {
             Spacer(modifier = Modifier.height(10.dp))
 
             when (selectedBottomNav) {
-                0 -> { // HOME (ড্যাশবোর্ড)
+                0 -> {
                     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         WelcomeCardCompact()
                         Spacer(modifier = Modifier.height(14.dp))
@@ -543,16 +532,16 @@ fun CockpitDashboardScreen() {
                         Spacer(modifier = Modifier.height(16.dp))
                     }
                 }
-                1 -> { // USERS (গত ৭ দিনের একটিভ ওয়ার্কার্স)
+                1 -> {
                     ActiveWorkers7DaysTab(
                         usersMap = usersMap,
                         onInspect = { phone -> inspectingPhone = phone; activeModalId = "inspect" }
                     )
                 }
-                2 -> { // REPORTS (গত ৭ দিনের কাজের রিপোর্টস)
+                2 -> {
                     WorkReports7DaysTab(usersMap = usersMap)
                 }
-                3 -> { // COMMISSIONS (কমিশন ক্লেইম ম্যানেজার)
+                3 -> {
                     CommissionsManagerTab(
                         usersMap = usersMap,
                         onDeductCommission = { phone, amount ->
@@ -570,9 +559,6 @@ fun CockpitDashboardScreen() {
             }
         }
 
-        // ==========================================
-        // পপআপ মডালসমূহ
-        // ==========================================
         when (activeModalId) {
             "directory" -> UserDirectoryModal(
                 users = usersMap.values.toList(),
@@ -858,7 +844,6 @@ fun CockpitDashboardScreen() {
             )
         }
 
-        // কনফার্মেশন ডায়ালগ
         confirmDialog?.let { dialog ->
             AlertDialog(
                 onDismissRequest = { confirmDialog = null },
@@ -888,7 +873,6 @@ fun CockpitDashboardScreen() {
             )
         }
 
-        // টাস্ক পড়ার ফুল ডায়ালগ
         inspectingTaskText?.let { workText ->
             AlertDialog(
                 onDismissRequest = { inspectingTaskText = null },
@@ -905,9 +889,6 @@ fun CockpitDashboardScreen() {
     }
 }
 
-// -------------------------------------------------------------
-// ১. টপ হেডার
-// -------------------------------------------------------------
 @Composable
 fun HeaderBarCompact(totalNotifications: Int) {
     Row(
@@ -981,9 +962,6 @@ fun HeaderBarCompact(totalNotifications: Int) {
     }
 }
 
-// -------------------------------------------------------------
-// ২. টপ স্ট্যাটাস কার্ডস
-// -------------------------------------------------------------
 @Composable
 fun OverviewStatsNonClickable(
     totalUsers: Int,
@@ -1128,9 +1106,6 @@ fun NonClickableStatCard(
     }
 }
 
-// -------------------------------------------------------------
-// ৩. বটম নেভিগেশন ট্যাব ২: গত ৭ দিনের একটিভ ওয়ার্কার্স
-// -------------------------------------------------------------
 @Composable
 fun ActiveWorkers7DaysTab(
     usersMap: Map<String, UserProfile>,
@@ -1171,9 +1146,6 @@ fun ActiveWorkers7DaysTab(
     }
 }
 
-// -------------------------------------------------------------
-// ৪. বটম নেভিগেশন ট্যাব ৩: গত ৭ দিনের রিপোর্টস
-// -------------------------------------------------------------
 @Composable
 fun WorkReports7DaysTab(usersMap: Map<String, UserProfile>) {
     val allTasks = usersMap.flatMap { (phone, u) ->
@@ -1184,8 +1156,12 @@ fun WorkReports7DaysTab(usersMap: Map<String, UserProfile>) {
     val rejectedCount = allTasks.count { it.third.status == "Rejected" }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Text("Work Submissions (7-Day Report)", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
-        Text("Approved: $approvedCount | Rejected: $rejectedCount", color = NeonGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column {
+                Text("Work Submissions (7-Day Report)", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                Text("Approved: $approvedCount | Rejected: $rejectedCount", color = NeonGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         Spacer(modifier = Modifier.height(8.dp))
 
         LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1205,9 +1181,6 @@ fun WorkReports7DaysTab(usersMap: Map<String, UserProfile>) {
     }
 }
 
-// -------------------------------------------------------------
-// ৫. বটম নেভিগেশন ট্যাব ৪: কমিশন ম্যানেজার
-// -------------------------------------------------------------
 @Composable
 fun CommissionsManagerTab(
     usersMap: Map<String, UserProfile>,
@@ -1249,9 +1222,6 @@ fun CommissionsManagerTab(
     }
 }
 
-// -------------------------------------------------------------
-// ৬. লাইভ কমান্ড ডেক
-// -------------------------------------------------------------
 @Composable
 fun WorkspaceDeckLive(
     pendingDeposits: Int,
@@ -1358,9 +1328,6 @@ fun WorkspaceCardItemLive(modifier: Modifier = Modifier, data: WorkspaceActionDa
     }
 }
 
-// -------------------------------------------------------------
-// বেস ডায়ালগ ও ১০টি মডালস
-// -------------------------------------------------------------
 @Composable
 fun BaseCockpitDialog(
     title: String,
@@ -2196,9 +2163,6 @@ fun SystemSettingsModal(
     }
 }
 
-// -------------------------------------------------------------
-// ৭. বটম বার (Home, Users, Reports, Commission)
-// -------------------------------------------------------------
 @Composable
 fun CockpitLuxuryBottomNav(
     selected: Int,
@@ -2283,4 +2247,3 @@ fun WelcomeCardCompact() {
         }
     }
 }
-
