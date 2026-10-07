@@ -15,14 +15,27 @@ class CockpitBackgroundService : Service() {
 
     private val CHANNEL_ID = "cockpit_live_channel"
     private val NOTIFICATION_ID = 1001
-    private var isFirstLoad = true
-    private val notifiedKeys = mutableSetOf<String>()
+
+    private var isUsersInitialLoaded = false
+    private var isSendMoneyInitialLoaded = false
+    private var isChatsInitialLoaded = false
+
+    private val knownDeposits = mutableSetOf<String>()
+    private val knownWithdrawals = mutableSetOf<String>()
+    private val knownRecharges = mutableSetOf<String>()
+    private val knownTasks = mutableSetOf<String>()
+    private val knownSendMoney = mutableSetOf<String>()
+    private val knownChats = mutableSetOf<String>()
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createForegroundNotification())
         startFirebaseLiveMonitoring()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY // অ্যাপ ব্যাকগ্রাউন্ডে সবসময় চালু রাখবে
     }
 
     private fun createNotificationChannel() {
@@ -90,11 +103,9 @@ class CockpitBackgroundService : Service() {
 
             val db = FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
 
-            // ১. ডিপোজিট, উইথড্র, রিচার্জ, টাইপিং কাজ মনিটরিং
+            // ১. ডিপোজিট, উইথড্র, রিচার্জ, টাইপিং মনিটরিং
             db.getReference("users").addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    if (isFirstLoad) return
-
                     for (uChild in snapshot.children) {
                         val phone = uChild.key ?: ""
                         val name = uChild.child("name").getValue(String::class.java) ?: phone
@@ -102,41 +113,46 @@ class CockpitBackgroundService : Service() {
                         // ডিপোজিট
                         for (d in uChild.child("deposits").children) {
                             val key = "${phone}_dep_${d.key}"
-                            if (d.child("status").getValue(String::class.java) == "Pending" && !notifiedKeys.contains(key)) {
+                            val isPending = d.child("status").getValue(String::class.java) == "Pending"
+                            if (isPending && isUsersInitialLoaded && !knownDeposits.contains(key)) {
                                 val amt = d.child("amount").getValue(Any::class.java)?.toString() ?: "0"
-                                triggerSystemNotification("New Deposit Request!", "$name ($phone) sent deposit request of ৳$amt")
-                                notifiedKeys.add(key)
+                                triggerSystemNotification("New Deposit Request!", "$name ($phone) sent ৳$amt deposit request.")
                             }
+                            if (isPending) knownDeposits.add(key)
                         }
 
                         // উইথড্র
                         for (w in uChild.child("withdrawals").children) {
                             val key = "${phone}_wd_${w.key}"
-                            if (w.child("status").getValue(String::class.java) == "Pending" && !notifiedKeys.contains(key)) {
+                            val isPending = w.child("status").getValue(String::class.java) == "Pending"
+                            if (isPending && isUsersInitialLoaded && !knownWithdrawals.contains(key)) {
                                 val amt = w.child("amount").getValue(Any::class.java)?.toString() ?: "0"
-                                triggerSystemNotification("New Cash Out Request!", "$name ($phone) requested cash out of ৳$amt")
-                                notifiedKeys.add(key)
+                                triggerSystemNotification("New Cash Out Request!", "$name ($phone) requested cash out of ৳$amt.")
                             }
+                            if (isPending) knownWithdrawals.add(key)
                         }
 
                         // রিচার্জ
                         for (r in uChild.child("recharges").children) {
                             val key = "${phone}_rc_${r.key}"
-                            if (r.child("status").getValue(String::class.java) == "Pending" && !notifiedKeys.contains(key)) {
-                                triggerSystemNotification("New Mobile Recharge!", "$name ($phone) requested mobile recharge.")
-                                notifiedKeys.add(key)
+                            val isPending = r.child("status").getValue(String::class.java) == "Pending"
+                            if (isPending && isUsersInitialLoaded && !knownRecharges.contains(key)) {
+                                triggerSystemNotification("New Recharge Request!", "$name ($phone) requested mobile recharge.")
                             }
+                            if (isPending) knownRecharges.add(key)
                         }
 
                         // টাইপিং কাজ
                         for (p in uChild.child("paragraph_jobs").children) {
                             val key = "${phone}_pt_${p.key}"
-                            if (p.child("status").getValue(String::class.java) == "Pending" && !notifiedKeys.contains(key)) {
-                                triggerSystemNotification("New Typing Task Submitted!", "$name ($phone) submitted a task for review.")
-                                notifiedKeys.add(key)
+                            val isPending = p.child("status").getValue(String::class.java) == "Pending"
+                            if (isPending && isUsersInitialLoaded && !knownTasks.contains(key)) {
+                                triggerSystemNotification("New Typing Task!", "$name ($phone) submitted a task for approval.")
                             }
+                            if (isPending) knownTasks.add(key)
                         }
                     }
+                    isUsersInitialLoaded = true
                 }
                 override fun onCancelled(error: DatabaseError) {}
             })
@@ -144,27 +160,24 @@ class CockpitBackgroundService : Service() {
             // ২. সেন্ড মানি মনিটরিং
             db.getReference("pending_send_money").addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    if (isFirstLoad) return
                     for (c in snapshot.children) {
                         val key = "sm_${c.key}"
-                        if (c.child("status").getValue(String::class.java) == "Pending" && !notifiedKeys.contains(key)) {
+                        val isPending = c.child("status").getValue(String::class.java) == "Pending"
+                        if (isPending && isSendMoneyInitialLoaded && !knownSendMoney.contains(key)) {
                             val sender = c.child("sender").getValue(String::class.java) ?: ""
                             val amt = c.child("amount").getValue(Any::class.java)?.toString() ?: "0"
-                            triggerSystemNotification("New Send Money Request!", "Sender: $sender requested transfer of ৳$amt")
-                            notifiedKeys.add(key)
+                            triggerSystemNotification("New Send Money Request!", "$sender requested transfer of ৳$amt.")
                         }
+                        if (isPending) knownSendMoney.add(key)
                     }
+                    isSendMoneyInitialLoaded = true
                 }
                 override fun onCancelled(error: DatabaseError) {}
             })
 
-            // ৩. সাপোর্ট চ্যাট মেসেজ মনিটরিং
+            // ৩. সাপোর্ট চ্যাট মনিটরিং
             db.getReference("chats").addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
-                    if (isFirstLoad) {
-                        isFirstLoad = false
-                        return
-                    }
                     for (u in snapshot.children) {
                         val phone = u.key ?: ""
                         for (m in u.child("messages").children) {
@@ -172,12 +185,13 @@ class CockpitBackgroundService : Service() {
                             val sender = m.child("sender").getValue(String::class.java) ?: ""
                             val seen = m.child("seen").getValue(Boolean::class.java) ?: false
                             val text = m.child("text").getValue(String::class.java) ?: ""
-                            if (sender == "user" && !seen && !notifiedKeys.contains(key)) {
-                                triggerSystemNotification("New Support Message from $phone", text)
-                                notifiedKeys.add(key)
+                            if (sender == "user" && !seen && isChatsInitialLoaded && !knownChats.contains(key)) {
+                                triggerSystemNotification("New Message from $phone", text)
                             }
+                            if (sender == "user" && !seen) knownChats.add(key)
                         }
                     }
+                    isChatsInitialLoaded = true
                 }
                 override fun onCancelled(error: DatabaseError) {}
             })
