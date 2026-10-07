@@ -888,6 +888,9 @@ fun CockpitDashboardScreen() {
     }
 }
 
+// -------------------------------------------------------------
+// ১. টপ হেডার
+// -------------------------------------------------------------
 @Composable
 fun HeaderBarCompact(totalNotifications: Int) {
     Row(
@@ -961,6 +964,9 @@ fun HeaderBarCompact(totalNotifications: Int) {
     }
 }
 
+// -------------------------------------------------------------
+// ২. টপ স্ট্যাটাস কার্ডস
+// -------------------------------------------------------------
 @Composable
 fun OverviewStatsNonClickable(
     totalUsers: Int,
@@ -1105,6 +1111,9 @@ fun NonClickableStatCard(
     }
 }
 
+// -------------------------------------------------------------
+// ৩. বটম নেভিগেশন ট্যাব ২: গত ৭ দিনের একটিভ ওয়ার্কার্স
+// -------------------------------------------------------------
 @Composable
 fun ActiveWorkers7DaysTab(
     usersMap: Map<String, UserProfile>,
@@ -1145,6 +1154,9 @@ fun ActiveWorkers7DaysTab(
     }
 }
 
+// -------------------------------------------------------------
+// ৪. বটম নেভিগেশন ট্যাব ৩: গত ৭ দিনের রিপোর্টস
+// -------------------------------------------------------------
 @Composable
 fun WorkReports7DaysTab(usersMap: Map<String, UserProfile>) {
     val allTasks = usersMap.flatMap { (phone, u) ->
@@ -1180,6 +1192,9 @@ fun WorkReports7DaysTab(usersMap: Map<String, UserProfile>) {
     }
 }
 
+// -------------------------------------------------------------
+// ৫. বটম নেভিগেশন ট্যাব ৪: কমিশন ম্যানেজার
+// -------------------------------------------------------------
 @Composable
 fun CommissionsManagerTab(
     usersMap: Map<String, UserProfile>,
@@ -1221,6 +1236,9 @@ fun CommissionsManagerTab(
     }
 }
 
+// -------------------------------------------------------------
+// ৬. লাইভ কমান্ড ডেক
+// -------------------------------------------------------------
 @Composable
 fun WorkspaceDeckLive(
     pendingDeposits: Int,
@@ -1327,6 +1345,9 @@ fun WorkspaceCardItemLive(modifier: Modifier = Modifier, data: WorkspaceActionDa
     }
 }
 
+// -------------------------------------------------------------
+// বেস ডায়ালগ ও ১০টি মডালস
+// -------------------------------------------------------------
 @Composable
 fun BaseCockpitDialog(
     title: String,
@@ -1489,6 +1510,9 @@ fun InspectUserModal(
 ) {
     val referrer = allUsers.values.find { it.uid == user.referred_by }
     val myReferrals = allUsers.values.filter { it.referred_by == user.uid }
+    val receivedList = user.sendmoney?.values?.toList() ?: emptyList()
+    val lastDeposits = user.deposits?.values?.toList()?.takeLast(3) ?: emptyList()
+    val lastWithdrawals = user.withdrawals?.values?.toList()?.takeLast(3) ?: emptyList()
 
     BaseCockpitDialog(title = "User Deep-Dive & All Records", onDismiss = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth().height(420.dp).verticalScroll(rememberScrollState())) {
@@ -1536,11 +1560,10 @@ fun InspectUserModal(
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Text("Received Send Money History", color = GoldMetallicLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    val received = user.sendmoney?.values?.toList() ?: emptyList()
-                    if (received.isEmpty()) {
+                    if (receivedList.isEmpty()) {
                         Text("No send money received yet.", color = TextDimGray, fontSize = 9.5.sp)
                     } else {
-                        received.forEach { sm ->
+                        for (sm in receivedList) {
                             Text("• ৳${sm.amount} from ${sm.senderName} (${sm.sender}) on ${sm.date}", color = NeonGreen, fontSize = 9.5.sp)
                         }
                     }
@@ -1550,10 +1573,10 @@ fun InspectUserModal(
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Text("Transaction Logs", color = GoldMetallicLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    user.deposits?.values?.takeLast(3)?.forEach { d ->
+                    for (d in lastDeposits) {
                         Text("• Deposit: ৳${d.amount} via ${d.wallet} (${d.status}) - TxID: ${d.txid}", color = NeonCyan, fontSize = 9.5.sp)
                     }
-                    user.withdrawals?.values?.takeLast(3)?.forEach { w ->
+                    for (w in lastWithdrawals) {
                         Text("• Cash Out: ৳${w.amount} via ${w.wallet} (${w.status}) on ${w.date}", color = NeonRose, fontSize = 9.5.sp)
                     }
                 }
