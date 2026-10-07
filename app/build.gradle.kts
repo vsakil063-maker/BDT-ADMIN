@@ -50,6 +50,7 @@ dependencies {
     // Coil Image Loader
     implementation("io.coil-kt:coil-compose:2.5.0")
     
-    // Firebase Realtime Database
+    // Firebase Realtime Database & Messaging (FCM)
     implementation("com.google.firebase:firebase-database-ktx:20.3.1")
+    implementation("com.google.firebase:firebase-messaging-ktx:23.4.1")
 }
