@@ -3,10 +3,9 @@ package com.rtgrowth.cockpit.service
 import android.app.*
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.IBinder
-import android.os.PowerManager
-import android.os.SystemClock
+import android.media.AudioAttributes
+import android.media.RingtoneManager
+import android.os.*
 import androidx.core.app.NotificationCompat
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
@@ -16,7 +15,8 @@ import com.rtgrowth.cockpit.R
 
 class CockpitBackgroundService : Service() {
 
-    private val CHANNEL_ID = "cockpit_live_channel"
+    private val SERVICE_CHANNEL_ID = "cockpit_service_silent_v2"
+    private val ALERT_CHANNEL_ID = "cockpit_high_alerts_v2"
     private val NOTIFICATION_ID = 1001
 
     private var isUsersInitialLoaded = false
@@ -31,31 +31,31 @@ class CockpitBackgroundService : Service() {
     private val knownChats = mutableSetOf<String>()
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var keepAliveRunnable: Runnable? = null
 
     override fun onCreate() {
         super.onCreate()
-        
-        // ১. স্ক্রিন অফ থাকলেও প্রসেসর চালু রাখার ওয়েক-লক
+
+        // ১. সিপিইউ ব্যাকগ্রাউন্ডে জাগিয়ে রাখা
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Cockpit::LiveSyncWakeLock").apply {
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Cockpit::RealtimeWakeLock").apply {
             acquire(24 * 60 * 60 * 1000L)
         }
 
-        createNotificationChannel()
+        createNotificationChannels()
         startForeground(NOTIFICATION_ID, createForegroundNotification())
         startFirebaseLiveMonitoring()
+        startKeepAliveHeartbeat()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // ফায়ারবেস কানেকশন জোরপূর্বক চালু রাখা
         try {
             FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com").goOnline()
         } catch (e: Exception) {}
-        
-        return START_STICKY // সিস্টেম কিল করলেও যেন অটো রিস্টার্ট নেয়
+        return START_STICKY
     }
 
-    // 💥 সবচেয়ে গুরুত্বপূর্ণ: রিসেন্ট থেকে সোয়াইপ করে কাটলে সার্ভিস স্বয়ংক্রিয়ভাবে রিস্টার্ট হবে
     override fun onTaskRemoved(rootIntent: Intent?) {
         val restartServiceIntent = Intent(applicationContext, CockpitBackgroundService::class.java).also {
             it.setPackage(packageName)
@@ -67,26 +67,48 @@ class CockpitBackgroundService : Service() {
         val alarmService = applicationContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         alarmService.set(
             AlarmManager.ELAPSED_REALTIME,
-            SystemClock.elapsedRealtime() + 1000, // ১ সেকেন্ড পর রিস্টার্ট করবে
+            SystemClock.elapsedRealtime() + 1000,
             restartServicePendingIntent
         )
         super.onTaskRemoved(rootIntent)
     }
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Cockpit Live Notifications",
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            // ১. ব্যাকগ্রাউন্ড সার্ভিসের সাইলেন্ট চ্যানেল
+            val serviceChannel = NotificationChannel(
+                SERVICE_CHANNEL_ID,
+                "Cockpit Background Status",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Shows app background live status"
+                setShowBadge(false)
+            }
+
+            // ২. নতুন ডিপোজিট/উইথড্র অ্যালার্ট চ্যানেল (সাউন্ড ও পপ-আপসহ)
+            val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                .build()
+
+            val alertChannel = NotificationChannel(
+                ALERT_CHANNEL_ID,
+                "Cockpit Live Real-time Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Live alerts for deposits, withdrawals, tasks, and chats"
+                description = "High priority instant alerts for deposits, cash out and chats"
                 enableVibration(true)
-                setShowBadge(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400)
+                setSound(soundUri, audioAttributes)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                setShowBadge(true)
             }
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.createNotificationChannel(channel)
+
+            manager.createNotificationChannel(serviceChannel)
+            manager.createNotificationChannel(alertChannel)
         }
     }
 
@@ -97,35 +119,54 @@ class CockpitBackgroundService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, SERVICE_CHANNEL_ID)
             .setContentTitle("RT Growth Cockpit Live")
             .setContentText("সার্ভিস ব্যাকগ্রাউন্ডে সক্রিয় রয়েছে...")
             .setSmallIcon(R.drawable.ic_notification_bell)
             .setContentIntent(pendingIntent)
-            .setOngoing(true) // যাতে ইউজার নোটিফিকেশন ডানে-বামে সরিয়ে বন্ধ না করে দেয়
+            .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
     private fun triggerSystemNotification(title: String, message: String) {
-        val intent = Intent(this, MainActivity::class.java)
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
         val pendingIntent = PendingIntent.getActivity(
             this, System.currentTimeMillis().toInt(), intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+        val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
+        val notification = NotificationCompat.Builder(this, ALERT_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(message)
             .setSmallIcon(R.drawable.ic_notification_bell)
+            .setSound(soundUri)
+            .setVibrate(longArrayOf(0, 400, 200, 400))
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .build()
 
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(System.currentTimeMillis().toInt(), notification)
+    }
+
+    private fun startKeepAliveHeartbeat() {
+        keepAliveRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com").goOnline()
+                } catch (e: Exception) {}
+                mainHandler.postDelayed(this, 15000) // প্রতি ১৫ সেকেন্ড পর পর কানেকশন জাগিয়ে রাখবে
+            }
+        }
+        mainHandler.post(keepAliveRunnable!!)
     }
 
     private fun startFirebaseLiveMonitoring() {
@@ -159,7 +200,7 @@ class CockpitBackgroundService : Service() {
                             val isPending = d.child("status").getValue(String::class.java) == "Pending"
                             if (isPending && isUsersInitialLoaded && !knownDeposits.contains(key)) {
                                 val amt = d.child("amount").getValue(Any::class.java)?.toString() ?: "0"
-                                triggerSystemNotification("New Deposit Request!", "$name ($phone) sent ৳$amt deposit request.")
+                                triggerSystemNotification("🔔 New Deposit Request!", "$name ($phone) sent ৳$amt deposit request.")
                             }
                             if (isPending) knownDeposits.add(key)
                         }
@@ -170,7 +211,7 @@ class CockpitBackgroundService : Service() {
                             val isPending = w.child("status").getValue(String::class.java) == "Pending"
                             if (isPending && isUsersInitialLoaded && !knownWithdrawals.contains(key)) {
                                 val amt = w.child("amount").getValue(Any::class.java)?.toString() ?: "0"
-                                triggerSystemNotification("New Cash Out Request!", "$name ($phone) requested cash out of ৳$amt.")
+                                triggerSystemNotification("💰 New Cash Out Request!", "$name ($phone) requested cash out of ৳$amt.")
                             }
                             if (isPending) knownWithdrawals.add(key)
                         }
@@ -180,7 +221,7 @@ class CockpitBackgroundService : Service() {
                             val key = "${phone}_rc_${r.key}"
                             val isPending = r.child("status").getValue(String::class.java) == "Pending"
                             if (isPending && isUsersInitialLoaded && !knownRecharges.contains(key)) {
-                                triggerSystemNotification("New Recharge Request!", "$name ($phone) requested mobile recharge.")
+                                triggerSystemNotification("📱 New Recharge Request!", "$name ($phone) requested mobile recharge.")
                             }
                             if (isPending) knownRecharges.add(key)
                         }
@@ -190,7 +231,7 @@ class CockpitBackgroundService : Service() {
                             val key = "${phone}_pt_${p.key}"
                             val isPending = p.child("status").getValue(String::class.java) == "Pending"
                             if (isPending && isUsersInitialLoaded && !knownTasks.contains(key)) {
-                                triggerSystemNotification("New Typing Task!", "$name ($phone) submitted a task for approval.")
+                                triggerSystemNotification("📝 New Typing Task!", "$name ($phone) submitted a task for approval.")
                             }
                             if (isPending) knownTasks.add(key)
                         }
@@ -209,7 +250,7 @@ class CockpitBackgroundService : Service() {
                         if (isPending && isSendMoneyInitialLoaded && !knownSendMoney.contains(key)) {
                             val sender = c.child("sender").getValue(String::class.java) ?: ""
                             val amt = c.child("amount").getValue(Any::class.java)?.toString() ?: "0"
-                            triggerSystemNotification("New Send Money Request!", "$sender requested transfer of ৳$amt.")
+                            triggerSystemNotification("💸 New Send Money Request!", "$sender requested transfer of ৳$amt.")
                         }
                         if (isPending) knownSendMoney.add(key)
                     }
@@ -229,7 +270,7 @@ class CockpitBackgroundService : Service() {
                             val seen = m.child("seen").getValue(Boolean::class.java) ?: false
                             val text = m.child("text").getValue(String::class.java) ?: ""
                             if (sender == "user" && !seen && isChatsInitialLoaded && !knownChats.contains(key)) {
-                                triggerSystemNotification("New Message from $phone", text)
+                                triggerSystemNotification("💬 New Message from $phone", text)
                             }
                             if (sender == "user" && !seen) knownChats.add(key)
                         }
@@ -244,6 +285,7 @@ class CockpitBackgroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        keepAliveRunnable?.let { mainHandler.removeCallbacks(it) }
         wakeLock?.let {
             if (it.isHeld) it.release()
         }
