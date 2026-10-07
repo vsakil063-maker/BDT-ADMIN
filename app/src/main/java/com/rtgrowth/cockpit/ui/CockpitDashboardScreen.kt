@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.rounded.*
@@ -61,7 +60,7 @@ val TextDimGray = Color(0xFF8A92A6)
 val TextPureWhite = Color(0xFFFFFFFF)
 
 // ==========================================
-// 🌐 ডেটা মডেল
+// 🌐 ফায়ারবেস ডেটা মডেল
 // ==========================================
 data class UserProfile(
     val phone: String = "",
@@ -174,12 +173,23 @@ data class ConfirmDialogState(
     val onConfirm: () -> Unit
 )
 
+data class WorkspaceActionData(
+    val title: String,
+    val desc: String,
+    val iconUrl: String,
+    val glowColor: Color,
+    val badge: Int?,
+    val modalId: String
+)
+
+// ==========================================
+// 📱 মেইন ড্যাশবোর্ড স্ক্রিন
+// ==========================================
 @Composable
 fun CockpitDashboardScreen() {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
 
-    // Firebase Initialization with Safety Catch
     val db = remember {
         try {
             if (FirebaseApp.getApps(context).isEmpty()) {
@@ -214,7 +224,7 @@ fun CockpitDashboardScreen() {
         Toast.makeText(context, "$label কপি করা হয়েছে!", Toast.LENGTH_SHORT).show()
     }
 
-    // Live Realtime Listeners
+    // Firebase Data Listeners
     DisposableEffect(Unit) {
         val usersRef = db.getReference("users")
         val sendMoneyRef = db.getReference("pending_send_money")
@@ -494,18 +504,15 @@ fun CockpitDashboardScreen() {
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
-            // ১. টপ হেডার
             HeaderBarCompact(totalNotifications = totalPendingNotifications)
             Spacer(modifier = Modifier.height(10.dp))
 
-            // ট্যাবের কনটেন্ট
             when (selectedBottomNav) {
                 0 -> { // HOME (ড্যাশবোর্ড)
                     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                         WelcomeCardCompact()
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // টপ স্ট্যাটাস কার্ড (ক্লিক বন্ধ)
                         OverviewStatsNonClickable(
                             totalUsers = totalUsersCount,
                             activeUsers = activeUsersCount,
@@ -522,7 +529,6 @@ fun CockpitDashboardScreen() {
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // কমান্ড ডেক
                         WorkspaceDeckLive(
                             pendingDeposits = pendingDepositsCount,
                             pendingWithdrawals = pendingWithdrawalsCount,
@@ -543,7 +549,7 @@ fun CockpitDashboardScreen() {
                         onInspect = { phone -> inspectingPhone = phone; activeModalId = "inspect" }
                     )
                 }
-                2 -> { // REPORTS (গত ৭ দিনের রিপোর্টস)
+                2 -> { // REPORTS (গত ৭ দিনের কাজের রিপোর্টস)
                     WorkReports7DaysTab(usersMap = usersMap)
                 }
                 3 -> { // COMMISSIONS (কমিশন ক্লেইম ম্যানেজার)
@@ -900,7 +906,7 @@ fun CockpitDashboardScreen() {
 }
 
 // -------------------------------------------------------------
-// ১. টপ হেডার (বেল আইকনে মোট নোটিফিকেশন কাউন্ট)
+// ১. টপ হেডার
 // -------------------------------------------------------------
 @Composable
 fun HeaderBarCompact(totalNotifications: Int) {
@@ -976,7 +982,7 @@ fun HeaderBarCompact(totalNotifications: Int) {
 }
 
 // -------------------------------------------------------------
-// ২. টপ স্ট্যাটাস কার্ডস (ক্লিক বন্ধ, পারফেক্ট সাবটাইটেল)
+// ২. টপ স্ট্যাটাস কার্ডস
 // -------------------------------------------------------------
 @Composable
 fun OverviewStatsNonClickable(
@@ -1057,7 +1063,7 @@ fun OverviewStatsNonClickable(
                 modifier = Modifier.weight(1f),
                 title = "Asset Volume",
                 value = "৳${String.format("%.2f", totalVolume)}",
-                subtitle = "Total assets",
+                subtitle = "Today: ৳${String.format("%.2f", totalVolume)}",
                 glowColor = NeonCyan,
                 iconUrl = "https://img.icons8.com/?size=100&id=pemtUT1YiPwP&format=png&color=000000"
             )
@@ -1178,12 +1184,8 @@ fun WorkReports7DaysTab(usersMap: Map<String, UserProfile>) {
     val rejectedCount = allTasks.count { it.third.status == "Rejected" }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text("Work Submissions (7-Day Report)", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                Text("Approved: $approvedCount | Rejected: $rejectedCount", color = NeonGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            }
-        }
+        Text("Work Submissions (7-Day Report)", color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+        Text("Approved: $approvedCount | Rejected: $rejectedCount", color = NeonGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
 
         LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1248,8 +1250,146 @@ fun CommissionsManagerTab(
 }
 
 // -------------------------------------------------------------
-// ৬. User Directory Modal
+// ৬. লাইভ কমান্ড ডেক
 // -------------------------------------------------------------
+@Composable
+fun WorkspaceDeckLive(
+    pendingDeposits: Int,
+    pendingWithdrawals: Int,
+    pendingSendMoney: Int,
+    pendingRecharges: Int,
+    validVouchers: Int,
+    pendingTyping: Int,
+    unreadChats: Int,
+    onCardClick: (String) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.GridView, contentDescription = null, tint = GoldMetallicMain, modifier = Modifier.size(16.dp))
+            Spacer(modifier = Modifier.width(5.dp))
+            Text("Command Workspace Deck", color = TextPureWhite, fontWeight = FontWeight.Black, fontSize = 12.sp)
+        }
+        Text("Manage • Monitor • Grow", color = GoldMetallicDark, fontSize = 9.sp, fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold)
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
+
+    val workspaceList = listOf(
+        WorkspaceActionData("User Directory", "Manage users and balances.", "https://img.icons8.com/?size=100&id=3Z9nycT6VFaI&format=png&color=000000", NeonBlue, null, "directory"),
+        WorkspaceActionData("Deposits", "Review add money requests.", "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000", NeonYellow, pendingDeposits, "deposits"),
+        WorkspaceActionData("Withdrawals", "Pending cash out requests.", "https://img.icons8.com/?size=100&id=nBI1rs9Fp9Lm&format=png&color=000000", NeonGreen, pendingWithdrawals, "withdrawals"),
+        WorkspaceActionData("Send Money Req", "Handle transfer requests.", "https://img.icons8.com/?size=100&id=JQX2fDPyQq4E&format=png&color=000000", NeonBlue, pendingSendMoney, "sendmoney"),
+        WorkspaceActionData("Recharges", "Mobile recharge operations.", "https://img.icons8.com/?size=100&id=5rjf4RBWzzU4&format=png&color=000000", NeonYellow, pendingRecharges, "recharges"),
+        WorkspaceActionData("Gift Vouchers", "Create secure 21-digit codes.", "https://img.icons8.com/?size=100&id=DA67d1tKQ9Pr&format=png&color=000000", NeonRose, validVouchers, "vouchers"),
+        WorkspaceActionData("Typing Tasks", "Review submitted typing jobs.", "https://img.icons8.com/?size=100&id=oZAinaxvg8AD&format=png&color=000000", NeonPurple, pendingTyping, "typing"),
+        WorkspaceActionData("Support Chat", "Live helpdesk control console.", "https://img.icons8.com/?size=100&id=RntMFwIniVlj&format=png&color=000000", NeonCyan, unreadChats, "chat"),
+        WorkspaceActionData("Balance Reset", "Authorized reset controller.", "https://img.icons8.com/?size=100&id=ifMVi1WVk8u2&format=png&color=000000", NeonRose, null, "reset_balance"),
+        WorkspaceActionData("System Settings", "Configure MFS & app URLs.", "https://img.icons8.com/?size=100&id=v39wEv8JU1aa&format=png&color=000000", NeonCyan, null, "settings")
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (i in workspaceList.indices step 2) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                WorkspaceCardItemLive(modifier = Modifier.weight(1f), data = workspaceList[i], onClick = { onCardClick(workspaceList[i].modalId) })
+                if (i + 1 < workspaceList.size) {
+                    WorkspaceCardItemLive(modifier = Modifier.weight(1f), data = workspaceList[i + 1], onClick = { onCardClick(workspaceList[i + 1].modalId) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun WorkspaceCardItemLive(modifier: Modifier = Modifier, data: WorkspaceActionData, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .shadow(5.dp, RoundedCornerShape(16.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFF151722), CardSurfaceBottom)), RoundedCornerShape(16.dp))
+            .border(1.dp, Brush.verticalGradient(listOf(GoldMetallicMain.copy(0.4f), Color(0xFF232634))), RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(10.dp)
+    ) {
+        if (data.badge != null && data.badge > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(18.dp)
+                    .shadow(4.dp, CircleShape, spotColor = NeonRose)
+                    .background(NeonRose, CircleShape)
+                    .border(0.8.dp, Color.White.copy(0.7f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("${data.badge}", color = Color.White, fontSize = 8.5.sp, fontWeight = FontWeight.Black)
+            }
+        }
+
+        Column {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(data.glowColor.copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+                    .border(1.dp, data.glowColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(model = data.iconUrl, contentDescription = data.title, modifier = Modifier.size(36.dp), contentScale = ContentScale.Fit)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(data.title, color = TextPureWhite, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(data.desc, color = TextDimGray, fontSize = 8.sp, lineHeight = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .size(20.dp)
+                    .background(Color(0xFF1B1E2B), CircleShape)
+                    .border(0.8.dp, GoldMetallicMain.copy(0.6f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = GoldMetallicLight, modifier = Modifier.size(14.dp))
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// বেস ডায়ালগ ও ১০টি মডালস
+// -------------------------------------------------------------
+@Composable
+fun BaseCockpitDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .shadow(24.dp, RoundedCornerShape(20.dp))
+                .background(Brush.verticalGradient(listOf(Color(0xFF161826), Color(0xFF090A0F))), RoundedCornerShape(20.dp))
+                .border(1.4.dp, GoldMetallicMain.copy(0.4f), RoundedCornerShape(20.dp))
+                .padding(14.dp)
+        ) {
+            Column {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = TextDimGray, modifier = Modifier.size(18.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                content()
+            }
+        }
+    }
+}
+
 @Composable
 fun UserDirectoryModal(
     users: List<UserProfile>,
@@ -1374,9 +1514,6 @@ fun UserDirectoryModal(
     }
 }
 
-// -------------------------------------------------------------
-// ৭. Inspect User Modal
-// -------------------------------------------------------------
 @Composable
 fun InspectUserModal(
     user: UserProfile,
@@ -1459,9 +1596,6 @@ fun InspectUserModal(
     }
 }
 
-// -------------------------------------------------------------
-// ৮. Deposits Manager Modal
-// -------------------------------------------------------------
 @Composable
 fun DepositsManagerModal(
     users: Map<String, UserProfile>,
@@ -1524,9 +1658,6 @@ fun DepositsManagerModal(
     }
 }
 
-// -------------------------------------------------------------
-// ৯. Withdrawals Manager Modal
-// -------------------------------------------------------------
 @Composable
 fun WithdrawalsManagerModal(
     users: Map<String, UserProfile>,
@@ -1594,9 +1725,6 @@ fun WithdrawalsManagerModal(
     }
 }
 
-// -------------------------------------------------------------
-// ১০. Gift Vouchers Modal
-// -------------------------------------------------------------
 @Composable
 fun GiftVouchersModal(
     vouchers: List<GiftVoucher>,
@@ -1698,9 +1826,6 @@ fun GiftVouchersModal(
     }
 }
 
-// -------------------------------------------------------------
-// ১১. WhatsApp Style Support Chat Modal
-// -------------------------------------------------------------
 @Composable
 fun WhatsAppStyleSupportChatModal(
     chats: Map<String, List<ChatMessage>>,
@@ -1810,9 +1935,6 @@ fun WhatsAppStyleSupportChatModal(
     }
 }
 
-// -------------------------------------------------------------
-// বাকি সাপোর্টিং মডালস (SendMoney, Recharges, Typing, Reset, Settings)
-// -------------------------------------------------------------
 @Composable
 fun SendMoneyManagerModal(
     requests: List<SendMoneyRequest>,
@@ -2075,7 +2197,7 @@ fun SystemSettingsModal(
 }
 
 // -------------------------------------------------------------
-// বটম বার (Home, Users, Reports, Commission)
+// ৭. বটম বার (Home, Users, Reports, Commission)
 // -------------------------------------------------------------
 @Composable
 fun CockpitLuxuryBottomNav(
@@ -2162,31 +2284,3 @@ fun WelcomeCardCompact() {
     }
 }
 
-@Composable
-fun BaseCockpitDialog(
-    title: String,
-    onDismiss: () -> Unit,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .shadow(24.dp, RoundedCornerShape(20.dp))
-                .background(Brush.verticalGradient(listOf(Color(0xFF161826), Color(0xFF090A0F))), RoundedCornerShape(20.dp))
-                .border(1.4.dp, GoldMetallicMain.copy(0.4f), RoundedCornerShape(20.dp))
-                .padding(14.dp)
-        ) {
-            Column {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, color = GoldMetallicLight, fontWeight = FontWeight.Black, fontSize = 14.sp)
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Rounded.Close, contentDescription = "Close", tint = TextDimGray, modifier = Modifier.size(18.dp))
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                content()
-            }
-        }
-    }
-}
