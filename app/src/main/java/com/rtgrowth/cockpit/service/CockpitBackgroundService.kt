@@ -11,6 +11,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.database.*
 import com.rtgrowth.cockpit.MainActivity
+import com.rtgrowth.cockpit.R
 
 class CockpitBackgroundService : Service() {
 
@@ -74,7 +75,7 @@ class CockpitBackgroundService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("RT Growth Cockpit Live Active")
             .setContentText("Background real-time listener active...")
-            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setSmallIcon(R.drawable.ic_notification_bell) // আপডেট: বেল আইকন
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -91,7 +92,7 @@ class CockpitBackgroundService : Service() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(message)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.ic_notification_bell) // আপডেট: নতুন এলার্টেও বেল আইকন
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
