@@ -1,4 +1,4 @@
-epackage com.rtgrowth.cockpit.ui
+package com.rtgrowth.cockpit.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.*
