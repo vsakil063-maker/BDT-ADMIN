@@ -37,7 +37,7 @@ class CockpitBackgroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         
-        // সিপিইউ ব্যাকগ্রাউন্ডে জাগিয়ে রাখা
+        // সিপিইউ ব্যাকগ্রাউন্ডে সক্রিয় রাখা
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Cockpit::WakeLock").apply {
             acquire(24 * 60 * 60 * 1000L)
@@ -56,7 +56,7 @@ class CockpitBackgroundService : Service() {
         return START_STICKY
     }
 
-    // রিসেন্ট থেকে সোয়াইপ করে কাটলে সাথে সাথে নিজে থেকে রিস্টার্ট হবে
+    // অ্যাপ রিসেন্ট থেকে কাটলেও নিজে থেকে পুনরায় চালু হবে
     override fun onTaskRemoved(rootIntent: Intent?) {
         val restartIntent = Intent(applicationContext, CockpitBackgroundService::class.java).also {
             it.setPackage(packageName)
@@ -78,7 +78,7 @@ class CockpitBackgroundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-            // ১. ব্যাকগ্রাউন্ড সার্ভিসের সাইলেন্ট চ্যানেল
+            // ১. সাইলেন্ট চ্যানেল
             val serviceChannel = NotificationChannel(
                 SERVICE_CHANNEL_ID,
                 "Cockpit Service Status",
@@ -87,7 +87,7 @@ class CockpitBackgroundService : Service() {
                 setShowBadge(false)
             }
 
-            // ২. নতুন ডিপোজিট/মেসেজ অ্যালার্ট চ্যানেল (সাউন্ড ও ভাইব্রেশনসহ)
+            // ২. লাউড অ্যালার্ট চ্যানেল (সাউন্ড ও ভাইব্রেশনসহ)
             val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
             val audioAttributes = AudioAttributes.Builder()
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
@@ -162,7 +162,7 @@ class CockpitBackgroundService : Service() {
                 try {
                     FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com").goOnline()
                 } catch (e: Exception) {}
-                handler.postDelayed(this, 20000)
+                handler.postDelayed(this, 15000)
             }
         }
         handler.post(heartbeatRunnable!!)
@@ -258,7 +258,7 @@ class CockpitBackgroundService : Service() {
                 override fun onCancelled(error: DatabaseError) {}
             })
 
-            // ৩. সাপোর্ট চ্যাট
+            // ৩. সাপোর্ট চ্যাট (ছবিসহ যেকোনো মেসেজের নোটিফিকেশন)
             db.getReference("chats").addValueEventListener(object : ValueEventListener {
                 override fun onDataChange(snapshot: DataSnapshot) {
                     for (u in snapshot.children) {
@@ -268,8 +268,18 @@ class CockpitBackgroundService : Service() {
                             val sender = m.child("sender").getValue(String::class.java) ?: ""
                             val seen = m.child("seen").getValue(Boolean::class.java) ?: false
                             val text = m.child("text").getValue(String::class.java) ?: ""
+                            val imageUrl = m.child("imageUrl").getValue(String::class.java) 
+                                ?: m.child("image").getValue(String::class.java)
+
                             if (sender == "user" && !seen && isChatsInitialLoaded && !knownChats.contains(key)) {
-                                triggerAlertNotification("💬 New Message from $phone", text)
+                                val messagePreview = if (text.isNotBlank()) {
+                                    text
+                                } else if (!imageUrl.isNullOrBlank()) {
+                                    "📷 একটি ছবি পাঠিয়েছেন"
+                                } else {
+                                    "নতুন একটি বার্তা পাঠিয়েছেন"
+                                }
+                                triggerAlertNotification("💬 Message from $phone", messagePreview)
                             }
                             if (sender == "user" && !seen) knownChats.add(key)
                         }
