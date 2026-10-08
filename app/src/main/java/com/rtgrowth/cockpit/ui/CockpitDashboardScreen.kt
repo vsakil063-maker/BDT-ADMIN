@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.database.*
@@ -1676,6 +1678,28 @@ fun InspectUserModal(
                     }
                 }
             }
+
+            // --- কাজের সম্পূর্ণ হিস্টোরি (তারিখ, কাজ এবং ইনকাম) ---
+            Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text("📋 কাজের হিস্টোরি (Work History)", color = GoldMetallicLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val taskList = user.paragraph_jobs?.values?.toList()?.reversed() ?: emptyList()
+                    if (taskList.isEmpty()) {
+                        Text("এখনও কোনো কাজের হিস্টোরি নেই।", color = TextDimGray, fontSize = 9.5.sp)
+                    } else {
+                        for (task in taskList) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("• কাজ: ${task.topic.ifEmpty { task.type }}", color = TextPureWhite, fontSize = 10.sp, fontWeight = FontWeight.Medium)
+                                    Text("তারিখ: ${task.date.ifEmpty { "N/A" }}", color = TextDimGray, fontSize = 8.5.sp)
+                                }
+                                Text("+৳${task.amount} (${task.status})", color = if (task.status == "Success") NeonGreen else NeonYellow, fontSize = 9.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -1934,6 +1958,7 @@ fun WhatsAppStyleSupportChatModal(
 ) {
     var selectedPhone by remember { mutableStateOf<String?>(chats.keys.firstOrNull()) }
     var replyText by remember { mutableStateOf("") }
+    val context = LocalContext.current
 
     BaseCockpitDialog(title = "Live Support Helpdesk", onDismiss = onDismiss) {
         Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -1998,7 +2023,29 @@ fun WhatsAppStyleSupportChatModal(
                                         )
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    Text(msg.text, color = Color.White, fontSize = 12.sp)
+                                    val isImage = msg.text.startsWith("http") && (msg.text.contains("firebasestorage") || msg.text.contains(".jpg") || msg.text.contains(".png") || msg.text.contains(".webp") || msg.text.contains("image"))
+                                    if (isImage) {
+                                        SubcomposeAsyncImage(
+                                            model = ImageRequest.Builder(context)
+                                                .data(msg.text)
+                                                .crossfade(true)
+                                                .size(coil.size.Size(600, 600)) // সাইজ অপটিমাইজেশন যাতে ক্র্যাশ না করে
+                                                .build(),
+                                            loading = {
+                                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = GoldMetallicLight, strokeWidth = 2.dp)
+                                            },
+                                            error = {
+                                                Text("❌ ছবি লোড করা যায়নি", color = NeonRose, fontSize = 10.sp)
+                                            },
+                                            contentDescription = "Chat Image",
+                                            modifier = Modifier
+                                                .size(160.dp)
+                                                .clip(RoundedCornerShape(8.dp)),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                    } else {
+                                        Text(msg.text, color = Color.White, fontSize = 12.sp)
+                                    }
                                 }
                             }
                         }
