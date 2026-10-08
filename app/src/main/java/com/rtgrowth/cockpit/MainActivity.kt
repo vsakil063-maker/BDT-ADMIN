@@ -4,8 +4,11 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.app.ActivityCompat
@@ -28,7 +31,22 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // ২. ফায়ারবেস ডেটাবেস অনলাইন ও লাইভ সিঙ্ক সচল করা
+        // ২. ব্যাকগ্রাউন্ডে ২৪ ঘণ্টা সার্ভিস সচল রাখতে ব্যাটারি সেভার বন্ধ করার অনুমতি চাওয়া
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // ৩. ফায়ারবেস ডেটাবেস অনলাইন ও লাইভ সিঙ্ক সচল করা
         try {
             if (FirebaseApp.getApps(this).isEmpty()) {
                 val options = FirebaseOptions.Builder()
@@ -49,7 +67,7 @@ class MainActivity : ComponentActivity() {
             e.printStackTrace()
         }
 
-        // ৩. অ্যাপ বন্ধ থাকলেও ২৪ ঘণ্টা নোটিফিকেশন পাওয়ার জন্য ব্যাকগ্রাউন্ড সার্ভিস চালু
+        // ৪. অ্যাপ বন্ধ থাকলেও ব্যাকগ্রাউন্ড সার্ভিস চালু রাখার নির্দেশ
         val serviceIntent = Intent(this, CockpitBackgroundService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(serviceIntent)
