@@ -1,6 +1,8 @@
 package com.rtgrowth.cockpit.ui
 
 import android.content.Context
+import android.graphics.BitmapFactory
+import android.util.Base64
 import android.widget.Toast
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -19,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -163,6 +166,7 @@ data class ChatMessage(
     val id: String = "",
     val sender: String = "",
     val text: String = "",
+    val imageUrl: String = "",
     val timestamp: Long = 0L,
     val seen: Boolean = false
 )
@@ -428,12 +432,30 @@ fun CockpitDashboardScreen() {
                     val phone = uChild.key ?: continue
                     val mList = mutableListOf<ChatMessage>()
                     for (m in uChild.child("messages").children) {
+                        val textVal = try {
+                            m.child("text").getValue(Any::class.java)?.toString() ?: ""
+                        } catch (e: Exception) { "" }
+                        
+                        val imgVal = try {
+                            m.child("imageUrl").getValue(String::class.java)
+                                ?: m.child("image").getValue(String::class.java)
+                                ?: m.child("photo").getValue(String::class.java)
+                                ?: ""
+                        } catch (e: Exception) { "" }
+
+                        val timeVal = try {
+                            m.child("timestamp").getValue(Long::class.java)
+                                ?: m.child("timestamp").getValue(Double::class.java)?.toLong()
+                                ?: 0L
+                        } catch (e: Exception) { 0L }
+
                         mList.add(
                             ChatMessage(
                                 id = m.key ?: "",
                                 sender = m.child("sender").getValue(String::class.java) ?: "",
-                                text = m.child("text").getValue(String::class.java) ?: "",
-                                timestamp = m.child("timestamp").getValue(Long::class.java) ?: 0L,
+                                text = textVal,
+                                imageUrl = imgVal,
+                                timestamp = timeVal,
                                 seen = m.child("seen").getValue(Boolean::class.java) ?: false
                             )
                         )
@@ -1679,7 +1701,6 @@ fun InspectUserModal(
                 }
             }
 
-            // --- কাজের সম্পূর্ণ হিস্টোরি (তারিখ, কাজ এবং ইনকাম) ---
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF161926)), modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
                 Column(modifier = Modifier.padding(10.dp)) {
                     Text("📋 কাজের হিস্টোরি (Work History)", color = GoldMetallicLight, fontSize = 11.sp, fontWeight = FontWeight.Bold)
@@ -1947,6 +1968,88 @@ fun GiftVouchersModal(
     }
 }
 
+// =============================================================
+// নিরাপদ চ্যাট কনটেন্ট (ক্র্যাশ প্রতিরোধী ইমেজ ও টেক্সট হ্যান্ডলার)
+// =============================================================
+@Composable
+fun SafeChatMediaContent(text: String, imageUrl: String) {
+    val context = LocalContext.current
+
+    val candidate = when {
+        imageUrl.isNotBlank() -> imageUrl.trim()
+        text.isNotBlank() -> text.trim()
+        else -> ""
+    }
+
+    val isWebUrl = candidate.startsWith("http://", ignoreCase = true) ||
+            candidate.startsWith("https://", ignoreCase = true)
+
+    val isBase64 = candidate.startsWith("data:image", ignoreCase = true) ||
+            candidate.startsWith("/9j/") ||
+            candidate.startsWith("iVBORw0KGgo") ||
+            (candidate.length > 250 && !candidate.contains(" ") && !isWebUrl)
+
+    if (isWebUrl) {
+        SubcomposeAsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(candidate)
+                .crossfade(true)
+                .size(coil.size.Size(600, 600))
+                .build(),
+            loading = {
+                Box(modifier = Modifier.size(160.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = GoldMetallicLight, strokeWidth = 2.dp)
+                }
+            },
+            error = {
+                Text("❌ ছবি লোড করা যায়নি", color = NeonRose, fontSize = 10.sp)
+            },
+            contentDescription = "Chat Image",
+            modifier = Modifier
+                .size(170.dp)
+                .clip(RoundedCornerShape(8.dp)),
+            contentScale = ContentScale.Crop
+        )
+    } else if (isBase64) {
+        val bitmap = remember(candidate) {
+            try {
+                val cleanBase64 = if (candidate.contains(",")) candidate.substringAfter(",") else candidate
+                val decodedBytes = Base64.decode(cleanBase64.trim(), Base64.DEFAULT)
+
+                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size, options)
+
+                var inSampleSize = 1
+                while (options.outWidth / inSampleSize > 800 || options.outHeight / inSampleSize > 800) {
+                    inSampleSize *= 2
+                }
+                options.inJustDecodeBounds = false
+                options.inSampleSize = inSampleSize
+
+                BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.size, options)
+            } catch (e: Throwable) {
+                null
+            }
+        }
+
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Chat Base64 Image",
+                modifier = Modifier
+                    .size(170.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop
+            )
+        } else {
+            Text("📷 [ছবি লোড করতে সমস্যা হয়েছে]", color = NeonRose, fontSize = 11.sp)
+        }
+    } else {
+        val safeText = if (text.length > 2000) text.take(2000) + "..." else text
+        Text(safeText, color = Color.White, fontSize = 12.sp)
+    }
+}
+
 @Composable
 fun WhatsAppStyleSupportChatModal(
     chats: Map<String, List<ChatMessage>>,
@@ -1958,7 +2061,6 @@ fun WhatsAppStyleSupportChatModal(
 ) {
     var selectedPhone by remember { mutableStateOf<String?>(chats.keys.firstOrNull()) }
     var replyText by remember { mutableStateOf("") }
-    val context = LocalContext.current
 
     BaseCockpitDialog(title = "Live Support Helpdesk", onDismiss = onDismiss) {
         Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
@@ -2006,9 +2108,11 @@ fun WhatsAppStyleSupportChatModal(
                     }
 
                     LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(msgList) { msg ->
+                        items(msgList, key = { it.id }) { msg ->
                             if (msg.sender == "user" && !msg.seen) {
-                                onMarkSeen(phone, msg.id)
+                                LaunchedEffect(msg.id) {
+                                    onMarkSeen(phone, msg.id)
+                                }
                             }
                             val isUser = msg.sender == "user"
                             Box(
@@ -2023,29 +2127,7 @@ fun WhatsAppStyleSupportChatModal(
                                         )
                                         .padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
-                                    val isImage = msg.text.startsWith("http") && (msg.text.contains("firebasestorage") || msg.text.contains(".jpg") || msg.text.contains(".png") || msg.text.contains(".webp") || msg.text.contains("image"))
-                                    if (isImage) {
-                                        SubcomposeAsyncImage(
-                                            model = ImageRequest.Builder(context)
-                                                .data(msg.text)
-                                                .crossfade(true)
-                                                .size(coil.size.Size(600, 600)) // সাইজ অপটিমাইজেশন যাতে ক্র্যাশ না করে
-                                                .build(),
-                                            loading = {
-                                                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = GoldMetallicLight, strokeWidth = 2.dp)
-                                            },
-                                            error = {
-                                                Text("❌ ছবি লোড করা যায়নি", color = NeonRose, fontSize = 10.sp)
-                                            },
-                                            contentDescription = "Chat Image",
-                                            modifier = Modifier
-                                                .size(160.dp)
-                                                .clip(RoundedCornerShape(8.dp)),
-                                            contentScale = ContentScale.Crop
-                                        )
-                                    } else {
-                                        Text(msg.text, color = Color.White, fontSize = 12.sp)
-                                    }
+                                    SafeChatMediaContent(text = msg.text, imageUrl = msg.imageUrl)
                                 }
                             }
                         }
@@ -2452,7 +2534,6 @@ fun WelcomeCardCompact() {
 // ব্যালেন্স ব্যাকআপ ও রিস্টোর হেল্পার ফাংশন
 // =============================================================
 
-// ১. ব্যালেন্সের ব্যাকআপ রেখে ০ করার ফাংশন
 fun resetAllBalancesWithBackup(context: Context) {
     val db = FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
     val usersRef = db.getReference("users")
@@ -2482,7 +2563,6 @@ fun resetAllBalancesWithBackup(context: Context) {
     })
 }
 
-// ২. আগের ব্যালেন্স ফিরিয়ে দেওয়ার ফাংশন (Restore)
 fun restoreAllBalances(context: Context) {
     val db = FirebaseDatabase.getInstance("https://typing-5c3e4-default-rtdb.firebaseio.com")
     val backupRef = db.getReference("last_balance_backup")
